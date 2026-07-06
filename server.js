@@ -62,5 +62,5 @@ export function startServer({ port = 0 } = {}) {
 if (import.meta.url === pathToFileURL(process.argv[1] || '').href) {
   const porta = Number(process.argv[2]) || Number(process.env.PORT) || 4000;
   startServer({ port: porta }).then(({ port }) =>
-    console.log(`Revisor de Provas em http://localhost:${port}`));
+    console.log(`Conferildo em http://localhost:${port}`));
 }

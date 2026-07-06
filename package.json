@@ -19,8 +19,8 @@
     "http-server": "^14.1.1"
   },
   "build": {
-    "appId": "com.camara.revisorprovas",
-    "productName": "Revisor de Provas",
+    "appId": "com.camara.conferildo",
+    "productName": "Conferildo",
     "directories": {
       "output": "dist"
     },
@@ -32,6 +32,7 @@
       "src/**/*"
     ],
     "win": {
+      "icon": "src/icon.ico",
       "target": [
         {
           "target": "nsis",
@@ -46,7 +47,9 @@
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
       "createDesktopShortcut": true,
-      "shortcutName": "Revisor de Provas"
+      "installerIcon": "src/icon.ico",
+      "uninstallerIcon": "src/icon.ico",
+      "shortcutName": "Conferildo"
     }
   }
 }

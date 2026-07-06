@@ -1,4 +1,4 @@
-# Revisor de Provas
+# Conferildo
 
 Editor web de arquivos **ICML** (stories do InDesign/InCopy) para revisão de provas.
 O revisor edita o texto, aplica estilos de caractere por **seleção arbitrária** e insere
@@ -27,11 +27,11 @@ O app roda como um programa de desktop (Electron), sem precisar iniciar servidor
 ```bash
 npm install
 npm run app        # abre a janela do app (desenvolvimento)
-npm run dist       # gera o instalador Windows em dist/ (ex.: "Revisor de Provas Setup x.y.z.exe")
+npm run dist       # gera o instalador Windows em dist/ (ex.: "Conferildo Setup x.y.z.exe")
 ```
 
 O instalador (`npm run dist`) produz um `.exe` que o revisor executa uma vez para instalar;
-depois é só abrir "Revisor de Provas" pelo atalho — nada de terminal ou servidor. Por baixo,
+depois é só abrir "Conferildo" pelo atalho — nada de terminal ou servidor. Por baixo,
 o Electron sobe o mesmo `server.js` numa porta local livre (invisível) e abre a janela nele,
 então o carregamento de imagens locais (`/local-image`) continua funcionando.
 

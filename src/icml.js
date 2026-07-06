@@ -1,5 +1,5 @@
 /**
- * Núcleo de leitura/escrita de ICML para o Revisor de Provas.
+ * Núcleo de leitura/escrita de ICML para o Conferildo.
  *
  * Princípio central — EDIÇÃO CIRÚRGICA: nunca reconstruímos o documento a
  * partir de um modelo simplificado. Mantemos o DOM original do ICML como fonte
