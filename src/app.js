@@ -1590,7 +1590,7 @@ function toast(msg) {
 // Compara a versão instalada (version.json local, congelado na instalação) com a
 // do repositório (version.json na branch main). Se a remota for mais nova, mostra
 // um banner com link. Configure URL_VERSAO_REMOTA com o seu repositório GitHub.
-const URL_VERSAO_REMOTA = 'https://raw.githubusercontent.com/USUARIO/REPO/main/version.json';
+const URL_VERSAO_REMOTA = 'https://raw.githubusercontent.com/luizbmc/conferildo/main/version.json';
 
 function compararVersao(a, b) {   // 1 se a>b, -1 se a<b, 0 se igual
   const pa = String(a).split('.').map(Number), pb = String(b).split('.').map(Number);
