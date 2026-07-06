@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Conferildo</title>
+  <link rel="stylesheet" href="src/styles.css"/>
+</head>
+<body>
+  <header class="topo">
+    <div class="topo-titulo">
+      <h1>Conferildo</h1>
+      <span class="topo-arquivo" id="nome-arquivo">nenhum arquivo aberto</span>
+    </div>
+    <div class="topo-acoes">
+      <button class="btn btn-ghost" id="btn-desfazer" disabled title="Desfazer (Ctrl+Z)">↶</button>
+      <button class="btn btn-ghost" id="btn-refazer" disabled title="Refazer (Ctrl+Shift+Z)">↷</button>
+      <button class="btn btn-ghost" id="btn-busca" disabled>🔍 Localizar</button>
+      <button class="btn btn-ghost" id="btn-integridade" disabled title="Comparar com o DOCX original">⇄ Comparar DOCX</button>
+      <input type="file" id="input-docx" accept=".docx" hidden/>
+      <label class="btn btn-ghost">
+        Abrir ICML
+        <input type="file" id="input-arquivo" accept=".icml,.xml" hidden/>
+      </label>
+      <button class="btn btn-primario" id="btn-exportar" disabled>Exportar ICML</button>
+    </div>
+  </header>
+
+  <div class="banner-att" id="banner-att" hidden>
+    <span id="banner-att-msg"></span>
+    <a class="banner-att-link" id="banner-att-link" target="_blank" rel="noopener">Baixar atualização</a>
+    <button class="banner-att-fechar" id="banner-att-fechar" title="Dispensar">✕</button>
+  </div>
+
+  <div class="barra-busca" id="barra-busca" hidden>
+    <div class="bb-campos">
+      <input type="text" id="busca-termo" class="bb-input" placeholder="Localizar" autocomplete="off"/>
+      <input type="text" id="busca-subst" class="bb-input" placeholder="Substituir por" autocomplete="off"/>
+    </div>
+    <label class="bb-case" title="Diferenciar maiúsculas de minúsculas">
+      <input type="checkbox" id="busca-case"/> <span>Aa</span>
+    </label>
+    <span class="bb-contador" id="busca-contador">0/0</span>
+    <div class="bb-acoes">
+      <button class="btn btn-mini" id="busca-anterior" title="Anterior">‹</button>
+      <button class="btn btn-mini" id="busca-proximo" title="Próximo">›</button>
+      <button class="btn btn-mini" id="busca-substituir">Substituir</button>
+      <button class="btn btn-mini" id="busca-substituir-tudo">Substituir tudo</button>
+      <button class="btn btn-mini bb-fechar" id="busca-fechar" title="Fechar (Esc)">✕</button>
+    </div>
+  </div>
+
+  <div class="area">
+    <aside class="painel-alteracoes" id="painel-alteracoes" hidden>
+      <div class="pa-abas">
+        <button class="pa-aba ativa" id="aba-navegacao">Navegação</button>
+        <button class="pa-aba" id="aba-alteracoes">
+          Alterações <span class="pa-contador" id="pa-contador">0</span>
+        </button>
+        <button class="pa-aba" id="aba-comparacao">
+          Comparação <span class="pa-contador" id="pc-contador" hidden>0</span>
+        </button>
+      </div>
+      <div class="pa-conteudo" id="conteudo-alteracoes" hidden>
+        <p class="pa-vazio" id="pa-vazio">Nenhuma alteração registrada.</p>
+        <div class="pa-lista" id="lista-alteracoes"></div>
+      </div>
+      <div class="pa-conteudo" id="conteudo-navegacao">
+        <p class="pa-vazio" id="nav-vazio">Nenhum título encontrado.</p>
+        <div class="pa-lista" id="lista-navegacao"></div>
+      </div>
+      <div class="pa-conteudo" id="conteudo-comparacao" hidden>
+        <p class="pa-resumo-comp" id="pc-resumo">Clique em <b>⇄ Comparar DOCX</b> para conferir o texto contra o Word de origem.</p>
+        <div class="pa-lista" id="lista-comparacao"></div>
+      </div>
+    </aside>
+
+    <main class="palco">
+      <div class="vazio" id="vazio">
+        <p>Abra um arquivo <code>.icml</code> para começar a revisão.</p>
+        <p class="vazio-sub">Você pode arrastar e soltar o arquivo aqui.</p>
+      </div>
+      <div class="folha">
+        <div class="editor" id="editor"></div>
+      </div>
+    </main>
+
+    <aside class="painel-estilos" id="painel-estilos" hidden>
+      <div class="pe-secao">
+        <div class="pe-titulo">Estilo de parágrafo</div>
+        <p class="pe-dica" id="pe-dica-para">Clique num parágrafo e escolha o estilo.</p>
+        <div class="pe-lista" id="lista-para"></div>
+      </div>
+      <div class="pe-secao">
+        <div class="pe-titulo">Estilo de caractere</div>
+        <p class="pe-dica">Selecione um trecho e escolha o estilo.</p>
+        <div class="pe-lista" id="lista-char"></div>
+        <button class="btn btn-mini pe-largo" id="btn-limpar-char" title="Remover estilo de caractere da seleção">✕ Remover estilo</button>
+      </div>
+      <div class="pe-secao">
+        <button class="btn btn-mini pe-largo" id="btn-nota">＋ Adicionar nota</button>
+        <button class="btn btn-mini pe-largo" id="btn-restaurar" style="margin-top:6px">↩ Restaurar removido</button>
+        <button class="btn btn-mini pe-largo" id="btn-marcacoes" style="margin-top:6px">Ocultar marcações</button>
+      </div>
+    </aside>
+  </div>
+
+  <div class="painel-nota" id="painel-nota" hidden>
+    <div class="painel-nota-card">
+      <label for="nota-autor">Autor da nota</label>
+      <input type="text" id="nota-autor" class="nota-input" placeholder="Seu nome" autocomplete="off"/>
+      <label for="nota-texto" style="margin-top:12px">Texto da nota</label>
+      <textarea id="nota-texto" rows="4" placeholder="Observação para o designer…"></textarea>
+      <div class="painel-nota-acoes">
+        <button class="btn btn-ghost" id="nota-cancelar">Cancelar</button>
+        <button class="btn btn-primario" id="nota-salvar">Inserir nota</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="painel-rodape" id="painel-rodape" hidden>
+    <div class="painel-rodape-card">
+      <div class="painel-rodape-topo">
+        <span class="painel-rodape-titulo">Nota de rodapé</span>
+        <div class="painel-rodape-tools">
+          <button id="rodape-italico" title="Itálico"><em>I</em></button>
+          <button id="rodape-sobrescrito" title="Sobrescrito">x<sup>2</sup></button>
+        </div>
+      </div>
+      <div class="painel-rodape-editor" id="rodape-editor" contenteditable="true" spellcheck="true"></div>
+      <div class="painel-rodape-acoes">
+        <button class="btn btn-ghost" id="rodape-cancelar">Cancelar</button>
+        <button class="btn btn-primario" id="rodape-salvar">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="src/app.js"></script>
+</body>
+</html>

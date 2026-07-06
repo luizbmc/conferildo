@@ -1,0 +1,7 @@
+node_modules/
+dist/
+
+# Amostras de ICML/DOCX usadas em desenvolvimento (conteúdo real; não versionar).
+# O fixture necessário para os testes fica em test/fixtures/ e É versionado.
+/*.icml
+/*.docx

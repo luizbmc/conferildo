@@ -1,0 +1,52 @@
+{
+  "name": "revisor-provas",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Editor web de ICML para revisão de provas — edita texto, estilos e notas preservando a formatação do InDesign.",
+  "main": "electron-main.cjs",
+  "scripts": {
+    "test": "node --test",
+    "serve": "node server.js 4000",
+    "app": "electron .",
+    "dist": "electron-builder --win",
+    "dist:dir": "electron-builder --win --dir"
+  },
+  "devDependencies": {
+    "@xmldom/xmldom": "^0.9.6",
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3",
+    "http-server": "^14.1.1"
+  },
+  "build": {
+    "appId": "com.camara.revisorprovas",
+    "productName": "Revisor de Provas",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "index.html",
+      "version.json",
+      "server.js",
+      "electron-main.cjs",
+      "src/**/*"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "createDesktopShortcut": true,
+      "shortcutName": "Revisor de Provas"
+    }
+  }
+}

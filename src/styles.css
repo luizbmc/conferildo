@@ -1,0 +1,651 @@
+:root {
+  --azul: #2563eb;
+  --azul-escuro: #1d4ed8;
+  --borda: #e2e8f0;
+  --texto: #1e293b;
+  --suave: #64748b;
+  --fundo: #f8fafc;
+  --nota: #f59e0b;
+  --nota-fundo: #fffbeb;
+}
+
+* { box-sizing: border-box; }
+
+/* Garante que o atributo `hidden` vença classes com display: flex/block. */
+[hidden] { display: none !important; }
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: var(--texto);
+  background: var(--fundo);
+}
+
+/* ── Topo ── */
+.topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  background: #fff;
+  border-bottom: 1px solid var(--borda);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* ── Banner de atualização de versão ── */
+.banner-att {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 20px;
+  background: #eff6ff; border-bottom: 1px solid #bfdbfe; color: #1e3a8a;
+  font-size: 13px;
+  position: sticky; top: 57px; z-index: 11;
+}
+.banner-att-link {
+  color: #fff; background: var(--azul); border-radius: 6px;
+  padding: 4px 12px; font-weight: 600; text-decoration: none;
+}
+.banner-att-link:hover { background: var(--azul-escuro); }
+.banner-att-fechar {
+  margin-left: auto; background: none; border: none; cursor: pointer;
+  color: var(--suave); font-size: 14px; line-height: 1;
+}
+.banner-att-fechar:hover { color: var(--texto); }
+.topo-titulo { display: flex; align-items: baseline; gap: 12px; }
+.topo h1 { font-size: 18px; margin: 0; }
+.topo-arquivo { font-size: 13px; color: var(--suave); }
+.topo-acoes { display: flex; gap: 8px; }
+
+/* ── Botões ── */
+.btn {
+  font-size: 13px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--borda);
+  background: #fff;
+  color: var(--texto);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn:hover { background: #f1f5f9; }
+.btn-primario { background: var(--azul); border-color: var(--azul); color: #fff; }
+.btn-primario:hover:not(:disabled) { background: var(--azul-escuro); }
+.btn-primario:disabled { opacity: 0.5; cursor: default; }
+.btn-ghost { background: #fff; }
+.btn-mini { padding: 5px 10px; font-size: 12px; }
+
+/* ── Barra de localizar/substituir ── */
+.barra-busca {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 9px 20px;
+  background: #fff;
+  border-bottom: 1px solid var(--borda);
+  position: sticky;
+  top: 57px;
+  z-index: 9;
+  width: 50%;          /* metade da largura da página, tudo alinhado à esquerda */
+}
+/* Com a barra aberta, os painéis laterais descem para não ficar sob ela. */
+body.busca-aberta .painel-estilos,
+body.busca-aberta .painel-alteracoes { top: 106px; }
+/* Botão de busca no cabeçalho, estado aberto. */
+#btn-busca.ativo { background: var(--azul); border-color: var(--azul); color: #fff; }
+.bb-fechar { margin-left: 4px; }
+.bb-campos { display: flex; gap: 8px; flex: 0 1 auto; min-width: 0; }
+.bb-input {
+  font-size: 13px;
+  padding: 6px 10px;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--texto);
+  flex: 1;
+  min-width: 120px;
+}
+.bb-input:focus { outline: none; border-color: var(--azul); }
+.bb-case {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 13px; font-weight: 600; color: var(--suave);
+  cursor: pointer; user-select: none;
+}
+.bb-case input { cursor: pointer; }
+.bb-contador { font-size: 12px; color: var(--suave); min-width: 44px; text-align: center; }
+.bb-acoes { display: flex; gap: 6px; }
+
+/* Realce visual do resultado atual da busca (seleção nativa já destaca, mas
+   reforçamos para contraste no contenteditable). */
+::selection { background: rgba(37, 99, 235, 0.28); }
+
+/* ── Barra de ferramentas ── */
+.barra-ferramentas {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 10px 20px;
+  background: #fff;
+  border-bottom: 1px solid var(--borda);
+  position: sticky;
+  top: 57px;
+  z-index: 9;
+  flex-wrap: wrap;
+}
+.grupo { display: flex; align-items: center; gap: 8px; }
+.grupo-rotulo { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--suave); }
+.botoes-estilo { display: flex; gap: 6px; flex-wrap: wrap; }
+.dica { font-size: 12px; color: var(--suave); margin-left: auto; }
+
+.btn-char {
+  font-size: 13px;
+  padding: 5px 11px;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+}
+.btn-char:hover { border-color: var(--azul); color: var(--azul); }
+
+/* ── Área (editor + painel à direita) ── */
+.area { display: flex; align-items: flex-start; }
+
+/* ── Palco / editor ── */
+.palco { flex: 1; padding: 28px 20px 80px; display: flex; justify-content: center; min-width: 0; }
+
+/* ── Navegador de alterações (esquerda) ── */
+.painel-alteracoes {
+  width: 310px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 57px;
+  align-self: flex-start;
+  max-height: calc(100vh - 57px);
+  overflow-y: auto;
+  background: #fff;
+  border-right: 1px solid var(--borda);
+  padding: 16px 14px;
+}
+/* Abas do painel esquerdo (Alterações / Navegação) */
+.pa-abas { display: flex; gap: 2px; margin-bottom: 12px; border-bottom: 1px solid var(--borda); }
+.pa-aba {
+  display: flex; align-items: center; gap: 4px;
+  background: none; border: none; cursor: pointer;
+  padding: 6px 3px; margin-bottom: -1px;
+  font-size: 10px; text-transform: uppercase; letter-spacing: 0.01em;
+  font-weight: 600; color: var(--suave); white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+.pa-aba:hover { color: var(--texto); }
+.pa-aba.ativa { color: var(--azul); border-bottom-color: var(--azul); }
+.pa-conteudo { display: flex; flex-direction: column; gap: 8px; }
+
+/* Itens da aba Navegação — títulos/subtítulos indentados por nível */
+.nav-item {
+  display: block; width: 100%; text-align: left;
+  padding: 4px 8px; border: none; background: none; cursor: pointer;
+  font-size: 12.5px; color: var(--texto); line-height: 1.35;
+  border-radius: 5px; border-left: 2px solid transparent;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.nav-item:hover { background: #f1f5f9; color: var(--azul); border-left-color: var(--azul); }
+.nav-h1 { font-weight: 700; padding-left: 8px; }
+.nav-h2 { padding-left: 20px; }
+.nav-h3 { padding-left: 32px; font-size: 12px; color: var(--suave); }
+.nav-h4 { padding-left: 44px; font-size: 11.5px; color: var(--suave); }
+
+/* Aba Comparação (DOCX × ICML) */
+.pa-resumo-comp { font-size: 11.5px; color: var(--suave); margin: 0 0 8px; line-height: 1.4; }
+.pa-resumo-comp.pc-ok { color: #047857; font-weight: 600; }
+.pa-resumo-comp.pc-alerta { color: #b45309; font-weight: 600; }
+.pc-item {
+  text-align: left; width: 100%; display: block; cursor: pointer;
+  border: 1px solid var(--borda); border-left-width: 3px; border-radius: 6px;
+  padding: 7px 9px; background: #fff; font-size: 12px;
+}
+.pc-item:hover { background: #fffbeb; }
+.pc-item.sem-alvo { cursor: default; }
+.pc-item.tipo-enfase { border-left-color: #d97706; }
+.pc-item.tipo-texto, .pc-item.tipo-tabela, .pc-item.tipo-ausente { border-left-color: #dc2626; }
+.pc-item.tipo-extra { border-left-color: #64748b; }
+.pc-tag { display: block; font-size: 10px; text-transform: uppercase; letter-spacing: .03em; font-weight: 700; color: var(--suave); margin-bottom: 2px; }
+.pc-msg { color: var(--texto); word-break: break-word; }
+.pc-ctx { margin-top: 3px; font-size: 11px; color: var(--suave); font-style: italic; word-break: break-word; }
+
+/* Marcação (só do app, sem relação com textCondition) dos parágrafos com diferença */
+.para-diferenca .para-body,
+.para-diferenca .para-objeto { background: #fff7ed; box-shadow: -6px 0 0 0 #fb923c; }
+
+/* Comparação: trecho ADICIONADO pelo ICML em relação ao Word → verde. */
+.run-comp-add { background: #bbf7d0; border-radius: 2px; }
+
+/* Trecho do Word ausente inserido tachado: estilo neutro 14px (não sabemos o
+   estilo correto), independente do estilo de parágrafo herdado. */
+.para-body.para-comp-neutra {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  font-weight: 400;
+  font-style: normal;
+  color: #334155;
+  text-align: left;
+  text-indent: 0;
+  margin: 0;
+}
+
+.pa-contador {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--suave);
+  background: var(--fundo);
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 0 5px;
+}
+.pa-vazio { font-size: 11.5px; color: var(--suave); margin: 0; }
+.pa-lista { display: flex; flex-direction: column; gap: 6px; }
+.pa-item {
+  text-align: left;
+  width: 100%;
+  padding: 7px 9px;
+  border: 1px solid var(--borda);
+  border-left-width: 3px;
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  display: block;
+}
+.pa-item:hover { border-color: var(--azul); background: #f8faff; }
+.pa-item.tipo-alterado { border-left-color: #14bcaa; }
+.pa-item.tipo-removido { border-left-color: #eb5757; }
+.pa-tipo {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  font-weight: 700;
+  display: block;
+  margin-bottom: 2px;
+}
+.tipo-alterado .pa-tipo { color: #0e9384; }
+.tipo-removido .pa-tipo { color: #d64545; }
+.pa-preview { font-size: 12px; color: var(--texto); line-height: 1.35; word-break: break-word; }
+.tipo-removido .pa-preview { text-decoration: line-through; color: var(--suave); }
+
+/* Destaque temporário do trecho ao navegar até ele */
+@keyframes pa-flash {
+  0%, 100% { background-color: transparent; }
+  30%      { background-color: rgba(37, 99, 235, 0.28); }
+}
+.run-flash { animation: pa-flash 1.1s ease; border-radius: 3px; }
+
+/* ── Painel de estilos (direita) ── */
+.painel-estilos {
+  width: 310px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 57px;
+  align-self: flex-start;
+  max-height: calc(100vh - 57px);
+  overflow-y: auto;
+  background: #fff;
+  border-left: 1px solid var(--borda);
+  padding: 16px 14px;
+}
+.pe-secao { margin-bottom: 20px; }
+.pe-titulo {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--suave);
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+.pe-dica { font-size: 11.5px; color: var(--suave); margin: 0 0 8px; }
+.pe-lista { display: flex; flex-direction: column; gap: 3px; margin-bottom: 8px; }
+.pe-item {
+  text-align: left;
+  font-size: 13px;
+  padding: 6px 9px;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--texto);
+  cursor: pointer;
+}
+.pe-item:hover { border-color: var(--azul); color: var(--azul); }
+.pe-item.ativo { background: var(--azul); border-color: var(--azul); color: #fff; }
+
+/* Nome do grupo do estilo de parágrafo em destaque */
+.estilo-grupo { font-weight: 700; color: var(--azul); }
+.pe-item.ativo .estilo-grupo { color: #fff; }
+.pe-largo { width: 100%; }
+/* .folha reserva a margem esquerda (fora da página) para os rótulos de estilo. */
+.folha { position: relative; padding-left: 150px; }
+.editor {
+  width: 100%;
+  max-width: 720px;
+  background: #fff;
+  border: 1px solid var(--borda);
+  border-radius: 10px;
+  padding: 48px 52px;
+  display: none;
+}
+.editor.ativo { display: block; }
+
+.vazio { text-align: center; color: var(--suave); margin-top: 80px; }
+.vazio code { background: #eef2ff; padding: 1px 6px; border-radius: 4px; }
+.vazio-sub { font-size: 13px; }
+.palco.arrastando { outline: 3px dashed var(--azul); outline-offset: -12px; }
+
+/* ── Parágrafos ── */
+/* Página limpa: só o texto. O rótulo do estilo fica na margem esquerda (fora
+   da página) e as ações na margem direita, ambos posicionados em absoluto. */
+.para { position: relative; }
+
+/* Separador de quebra de página (SplitDocument="true") */
+.para > hr.nova-pagina {
+  width: 117%;
+  border: none;
+  border-top: 2px dashed #cbd5e1;
+  margin: 70px -50px 42px;
+  position: relative;
+}
+.para > hr.nova-pagina::after {
+  content: "nova página";
+  position: absolute;
+  top: -8px;
+  right: 0;
+  font-size: 10px;
+  color: var(--suave);
+  background: #fff;
+  padding: 0 6px;
+}
+.para + .para { margin-top: 10px; }
+.para.ativo { background: #eff6ff; border-radius: 6px; }
+
+/* Rótulo do estilo — na margem esquerda, FORA da página */
+.para-gutter {
+  position: absolute;
+  top: 2px;
+  right: 100%;
+  margin-right: 64px;   /* passa a borda esquerda da página, indo para o cinza */
+  width: 132px;
+  text-align: right;
+}
+.para-estilo {
+  font-size: 11px;
+  color: var(--suave);
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 2px 5px;
+  background: transparent;
+  max-width: 100%;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+  text-align: right;
+  transition: border-color 0.12s, background 0.12s;
+}
+.para:hover .para-estilo,
+.para-estilo:focus { border-color: var(--borda); background: var(--fundo); }
+
+/* Ações — na margem direita, discretas até o hover */
+.para-acoes {
+  position: absolute;
+  top: 2px;
+  left: 100%;
+  margin-left: 14px;
+  display: flex;
+  gap: 4px;
+}
+.para-acao {
+  font-size: 12px;
+  padding: 2px 7px;
+  border: 1px solid var(--borda);
+  border-radius: 5px;
+  background: #fff;
+  color: var(--suave);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s;
+}
+.para:hover .para-acao { opacity: 1; }
+.para-acao:hover { border-color: var(--azul); color: var(--azul); }
+.para-acao-del:hover { border-color: #dc2626; color: #dc2626; }
+
+.para-body {
+  outline: none;
+  line-height: 1.7;
+  font-size: 16px;
+  border-radius: 5px;
+  padding: 2px 4px;
+}
+.para-body:focus { background: #f8fafc; box-shadow: inset 0 0 0 1px var(--borda); }
+
+/* Parágrafo com lista de marcadores (BulletList no ICML) */
+.para-body.para-bullet { position: relative; padding-left: 1.4em; }
+.para-body.para-bullet::before {
+  content: "•";
+  position: absolute;
+  left: 0.35em;
+  color: inherit;
+}
+
+/* ── Runs com estilo de caractere ── */
+/* A aparência (tamanho, cor, peso, itálico, sublinhado) vem por estilo inline,
+   derivada das definições de estilo do ICML. */
+.run { position: relative; text-underline-offset: 2px; }
+
+/* Text conditions: destaque de fundo (cor na variável --cond-cor). "Texto
+   removido" fica tachado. O botão de marcações alterna a visibilidade. */
+.run-cond { background-color: var(--cond-cor); }
+.run-removido { text-decoration: line-through; text-decoration-color: rgba(0,0,0,0.55); }
+.marcacoes-ocultas .run-cond { background-color: transparent; }
+.marcacoes-ocultas .run-removido { display: none; }
+/* Parágrafo inteiro removido: some por completo ao ocultar as marcações. */
+.marcacoes-ocultas .para-removida { display: none; }
+
+/* ── Objeto (tabela / imagem) ── */
+.para-objeto { padding: 4px 0; }
+
+/* ── Imagem ── */
+.para-imagem { text-align: center; }
+.para-imagem img {
+  max-width: 60%;
+  height: auto;
+  border: 1px solid var(--borda);
+  border-radius: 4px;
+}
+.imagem-ausente {
+  display: inline-block;
+  padding: 20px 24px;
+  border: 1px dashed var(--borda);
+  border-radius: 6px;
+  color: var(--suave);
+  font-size: 13px;
+  background: var(--fundo);
+}
+
+/* ── Tabela ── */
+.para-tabela { padding: 4px 0; }
+.tabela {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+.tabela th, .tabela td {
+  border: 1px solid var(--borda);
+  padding: 6px 9px;
+  vertical-align: top;
+  text-align: left;
+  outline: none;
+}
+.tabela th {
+  background: var(--fundo);
+  font-weight: 600;
+}
+.tabela td:focus, .tabela th:focus {
+  box-shadow: inset 0 0 0 2px var(--azul);
+}
+
+/* ── Notas ── */
+.nota-marca {
+  display: inline-block;
+  cursor: pointer;
+  color: var(--nota);
+  font-size: 13px;
+  vertical-align: super;
+  user-select: none;
+  padding: 0 1px;
+}
+.nota-marca:hover { transform: scale(1.2); }
+
+/* Marcador de nota de rodapé — superscript numerado sequencialmente */
+.editor { counter-reset: rodape; }
+.rodape-marca {
+  counter-increment: rodape;
+  cursor: pointer;
+  color: var(--azul);
+  font-weight: 600;
+  user-select: none;
+}
+.rodape-marca::before { content: counter(rodape); }
+.rodape-marca:hover { text-decoration: underline; }
+
+/* ── Modal de integridade (DOCX × ICML) ── */
+.painel-integridade {
+  position: fixed; inset: 0; z-index: 60;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex; align-items: center; justify-content: center;
+}
+.pi-card {
+  background: #fff; border-radius: 10px; padding: 18px 20px;
+  width: min(760px, 92vw); max-height: 82vh; display: flex; flex-direction: column;
+  box-shadow: 0 10px 40px rgba(15, 23, 42, 0.25);
+}
+.pi-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pi-titulo { font-size: 15px; font-weight: 700; }
+.pi-resumo { font-size: 13px; margin: 0 0 12px; padding: 8px 10px; border-radius: 6px; }
+.pi-resumo.pi-ok    { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.pi-resumo.pi-alerta{ background: #fef2f2; color: #b91c1c; border: 1px solid #fecaca; }
+.pi-lista { overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+.pi-item {
+  border: 1px solid var(--borda); border-left-width: 3px; border-radius: 6px;
+  padding: 8px 10px; font-size: 12.5px;
+}
+.pi-item.pi-enfase { border-left-color: #d97706; }
+.pi-item.pi-texto, .pi-item.pi-tabela { border-left-color: #dc2626; }
+.pi-item.pi-ausente { border-left-color: #dc2626; }
+.pi-item.pi-extra { border-left-color: #64748b; }
+.pi-tag {
+  display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: .03em;
+  font-weight: 700; color: var(--suave); margin-bottom: 3px;
+}
+.pi-msg { font-weight: 600; }
+.pi-ctx { color: var(--suave); font-style: italic; margin-top: 2px; }
+.pi-linha { margin-top: 3px; word-break: break-word; }
+.pi-linha b { color: var(--suave); font-weight: 600; }
+
+.painel-nota {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.painel-nota-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 20px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.painel-nota-card label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 6px; }
+.painel-nota-card textarea,
+.painel-nota-card .nota-input {
+  width: 100%;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 8px;
+  font: inherit;
+  font-size: 14px;
+}
+.painel-nota-card textarea { resize: vertical; }
+.painel-nota-card .nota-input:focus,
+.painel-nota-card textarea:focus { outline: none; border-color: var(--azul); }
+.painel-nota-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* ── Modal de nota de rodapé (editável) ── */
+.painel-rodape {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+}
+.painel-rodape-card {
+  background: #fff;
+  border-radius: 10px;
+  padding: 18px;
+  width: 480px;
+  max-width: 92vw;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+.painel-rodape-topo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+.painel-rodape-titulo { font-size: 13px; font-weight: 600; }
+.painel-rodape-tools { display: flex; gap: 6px; }
+.painel-rodape-tools button {
+  min-width: 34px;
+  padding: 4px 8px;
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  background: #fff;
+  cursor: pointer;
+  font-size: 14px;
+}
+.painel-rodape-tools button:hover { border-color: var(--azul); color: var(--azul); }
+.painel-rodape-tools button.ativo { background: var(--azul); border-color: var(--azul); color: #fff; }
+.painel-rodape-editor {
+  border: 1px solid var(--borda);
+  border-radius: 6px;
+  padding: 10px 12px;
+  min-height: 90px;
+  font-size: 14px;
+  line-height: 1.6;
+  outline: none;
+  white-space: pre-wrap;   /* preserva o tab após o número da nota */
+}
+.painel-rodape-editor:focus { border-color: var(--azul); }
+.painel-rodape-acoes { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--texto);
+  color: #fff;
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  pointer-events: none;
+  z-index: 60;
+}
+.toast.mostra { opacity: 1; }
