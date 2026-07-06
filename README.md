@@ -48,6 +48,48 @@ então o carregamento de imagens locais (`/local-image`) continua funcionando.
 npm run serve      # http://localhost:4000 (server.js: estáticos + /local-image)
 ```
 
+## Versionamento e aviso de atualização
+
+A versão fica em dois lugares que devem andar juntos: **`package.json`** (`version`) e
+**`version.json`** (`version`, `url`, `notas`). O `version.json` é a *fonte da verdade* que o
+app consulta.
+
+Ao abrir, o app compara a versão **instalada** (o `version.json` que veio no instalador) com a
+do **repositório** (o `version.json` da branch `main` no GitHub). Se a do repositório for mais
+nova, mostra um banner **“Nova versão X disponível”** com o link de download.
+
+**Configuração (uma vez):** em [`src/app.js`](src/app.js), ajuste `URL_VERSAO_REMOTA` para o
+`raw` do seu repositório, ex.:
+
+```js
+const URL_VERSAO_REMOTA = 'https://raw.githubusercontent.com/<usuario>/<repo>/main/version.json';
+```
+
+(enquanto contiver `USUARIO/REPO`, a verificação fica desligada.)
+
+**A cada release:**
+
+1. Suba a versão em `package.json` **e** em `version.json` (mesmo número, ex.: `0.2.0`), e
+   aponte `version.json.url` para a página de releases (onde estará o `.exe`).
+2. `git commit -am "vX.Y.Z" && git tag vX.Y.Z && git push --follow-tags`.
+3. `npm run dist` gera o instalador; publique o `.exe` num **GitHub Release** da tag.
+
+Assim, quem já tem o app instalado vê o banner e baixa o novo `.exe`.
+
+## Repositório
+
+Este projeto usa git. Para publicar no GitHub:
+
+```bash
+gh repo create conferildo --private --source=. --push   # requer o GitHub CLI autenticado
+# ou, manualmente:
+git remote add origin https://github.com/<usuario>/conferildo.git
+git push -u origin main
+```
+
+As amostras de `.icml`/`.docx` na raiz são ignoradas (`.gitignore`) por conterem conteúdo
+real; o fixture de teste em `test/fixtures/` é versionado.
+
 Abra o navegador, arraste um `.icml` para a janela (ou "Abrir ICML"). Para revisar:
 
 - **Editar texto**: clique no parágrafo e digite.
