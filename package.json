@@ -9,6 +9,7 @@
     "test": "node --test",
     "serve": "node server.js 4000",
     "app": "electron .",
+    "release": "node release.mjs",
     "dist": "electron-builder --win",
     "dist:dir": "electron-builder --win --dir"
   },

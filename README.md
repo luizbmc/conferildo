@@ -67,14 +67,27 @@ const URL_VERSAO_REMOTA = 'https://raw.githubusercontent.com/<usuario>/<repo>/ma
 
 (enquanto contiver `USUARIO/REPO`, a verificação fica desligada.)
 
-**A cada release:**
+**A cada release (automatizado):**
 
-1. Suba a versão em `package.json` **e** em `version.json` (mesmo número, ex.: `0.2.0`), e
-   aponte `version.json.url` para a página de releases (onde estará o `.exe`).
-2. `git commit -am "vX.Y.Z" && git tag vX.Y.Z && git push --follow-tags`.
-3. `npm run dist` gera o instalador; publique o `.exe` num **GitHub Release** da tag.
+```bash
+npm run release -- 0.2.0                         # versão explícita
+npm run release -- minor --notes "O que mudou."  # ou patch|minor|major
+npm run release -- 0.2.1 --skip-build            # reusa um .exe já gerado
+```
 
-Assim, quem já tem o app instalado vê o banner e baixa o novo `.exe`.
+O `release.mjs` faz tudo: sobe a versão em `package.json` **e** `version.json`, commita, cria
+e envia a tag `vX.Y.Z`, gera o instalador (`npm run dist`) e publica o **GitHub Release** com o
+`.exe` anexado. O token vem do Git Credential Manager (o mesmo dos seus pushes), então não
+precisa do `gh`. Re-rodar é seguro (reaproveita o release e substitui o asset).
+
+> Como o passo do `npm run dist` cria *symlinks* (ferramenta de assinatura do electron-builder),
+> rode num terminal **como administrador** ou com o **Modo de Desenvolvedor** ligado. Se o `.exe`
+> já existe em `dist/`, use `--skip-build`.
+
+**Manualmente**, se preferir: suba a versão nos dois arquivos, `git tag vX.Y.Z && git push
+--follow-tags`, `npm run dist`, e anexe o `.exe` num GitHub Release da tag.
+
+Em qualquer caso, quem já tem o app instalado vê o banner e baixa o novo `.exe`.
 
 ## Repositório
 
