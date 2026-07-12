@@ -5,3 +5,7 @@ dist/
 # O fixture necessário para os testes fica em test/fixtures/ e É versionado.
 /*.icml
 /*.docx
+
+# Imagens vetoriais/PDF de teste (conteúdo real; não versionar).
+/*.ai
+/*.pdf

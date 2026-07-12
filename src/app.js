@@ -13,8 +13,13 @@ const state = {
   pendingNote: null,     // { psr, offset } enquanto o painel de nota está aberto
   pendingRodape: null,   // { footnote, original, holder, psr } ao editar rodapé
   paraAtivo: null,       // PSR do parágrafo clicado (alvo dos estilos de parágrafo)
+  selAnchor: null,       // PSR âncora da seleção de bloco (Shift+clique no rótulo)
+  selBloco: [],          // PSRs consecutivos selecionados (para recortar)
+  clipboardParas: [],    // PSRs na área de transferência aguardando colagem
+  clipboardModo: null,   // 'recortar' (mover) | 'copiar' (duplicar)
   condEdicao: null,      // Self da condition "Texto adicionado" (aplicada ao editar)
   condRemovido: null,    // Self da condition "Texto removido" (aplicada ao apagar)
+  condMovido: null,      // Self da condition "Texto movido" (aplicada ao recortar/colar)
   busca: { termo: '', matches: [], idx: -1 },  // localizar/substituir
   original: new Map(),   // texto pristino → assinatura (p/ desmarcar ao reverter estilo)
   hist: { stack: [], pos: -1, MAX: 5, restaurando: false, timer: null },  // undo/redo
@@ -130,6 +135,7 @@ async function abrirArquivo(file) {
     // Garante as conditions de controle de alterações (cria se faltarem).
     state.condEdicao   = icml.ensureCondition(doc, 'Texto adicionado', [26, 188, 170]);   // teal
     state.condRemovido = icml.ensureCondition(doc, 'Texto removido', [235, 87, 87]);     // vermelho
+    state.condMovido   = icml.ensureCondition(doc, 'Texto movido', [124, 92, 255]);       // violeta
     coresCondicao = icml.conditionColors(doc);
     capturarFormatacaoOriginal();   // baseline p/ detectar "voltou ao original"
     reiniciarHistoria();            // zera o undo/redo do arquivo anterior
@@ -199,6 +205,150 @@ function atualizarListaParaAtiva() {
     it.classList.toggle('ativo', it.dataset.self === alvo));
 }
 
+// ── Seleção de bloco + recortar/colar parágrafos ──────────────
+
+// Clique no rótulo do estilo: seleciona 1 parágrafo; Shift+clique estende o
+// intervalo consecutivo a partir da âncora.
+function selecionarRotulo(psr, wrap, estender) {
+  marcarParaAtivo(psr, wrap);
+  if (estender && state.selAnchor) {
+    const lista = icml.paragraphList(state.story);
+    const ia = lista.indexOf(state.selAnchor);
+    const ib = lista.indexOf(psr);
+    if (ia !== -1 && ib !== -1) {
+      const [lo, hi] = ia <= ib ? [ia, ib] : [ib, ia];
+      state.selBloco = lista.slice(lo, hi + 1);
+    } else {
+      state.selAnchor = psr; state.selBloco = [psr];
+    }
+  } else {
+    state.selAnchor = psr; state.selBloco = [psr];
+  }
+  aplicarMarcasParas();
+  atualizarBarraParas();
+}
+
+// Reaplica as classes de seleção/recorte nos .para já renderizados (sem re-render,
+// para não gerar snapshot de histórico numa simples seleção).
+function aplicarMarcasParas() {
+  el.editor.querySelectorAll('.para').forEach(p => {
+    p.classList.toggle('para-sel', state.selBloco.includes(p._psr));
+    p.classList.toggle('para-recortada',
+      state.clipboardModo === 'recortar' && state.clipboardParas.includes(p._psr));
+  });
+}
+
+let barraParas = null;
+function atualizarBarraParas() {
+  if (!barraParas) {
+    barraParas = document.createElement('div');
+    barraParas.className = 'barra-paras';
+    document.body.appendChild(barraParas);
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Escape') return;
+      if (state.clipboardParas.length) cancelarClipboard();
+      else if (state.selBloco.length) limparSelecao();
+    });
+  }
+  barraParas.innerHTML = '';
+  const info = document.createElement('span');
+  info.className = 'barra-paras-info';
+
+  if (state.clipboardParas.length) {
+    const verbo = state.clipboardModo === 'copiar' ? 'copiado(s)' : 'recortado(s)';
+    info.textContent = `${state.clipboardParas.length} parágrafo(s) ${verbo} — clique no destino e cole`;
+    barraParas.append(info,
+      botaoBarra('📋 Colar aqui', colarParas, true),
+      botaoBarra('✕ Cancelar', cancelarClipboard));
+    barraParas.hidden = false;
+  } else if (state.selBloco.length) {
+    info.textContent = `${state.selBloco.length} parágrafo(s) selecionado(s)`;
+    barraParas.append(info,
+      botaoBarra('✂ Recortar', recortarParas, true),
+      botaoBarra('📄 Copiar', copiarParas, true),
+      botaoBarra('✕', limparSelecao));
+    barraParas.hidden = false;
+  } else {
+    barraParas.hidden = true;
+  }
+}
+
+function botaoBarra(txt, fn, primario) {
+  const b = document.createElement('button');
+  b.className = 'barra-paras-btn' + (primario ? ' primario' : '');
+  b.textContent = txt;
+  b.addEventListener('click', fn);
+  return b;
+}
+
+function limparSelecao() {
+  state.selBloco = []; state.selAnchor = null;
+  aplicarMarcasParas();
+  atualizarBarraParas();
+}
+
+function recortarParas() {
+  if (!state.selBloco.length) return;
+  state.clipboardParas = state.selBloco.slice();
+  state.clipboardModo = 'recortar';
+  state.selBloco = []; state.selAnchor = null;
+  aplicarMarcasParas();
+  atualizarBarraParas();
+  toast(`${state.clipboardParas.length} parágrafo(s) recortado(s). Clique num destino e cole.`);
+}
+
+function copiarParas() {
+  if (!state.selBloco.length) return;
+  state.clipboardParas = state.selBloco.slice();
+  state.clipboardModo = 'copiar';
+  state.selBloco = []; state.selAnchor = null;
+  aplicarMarcasParas();
+  atualizarBarraParas();
+  toast(`${state.clipboardParas.length} parágrafo(s) copiado(s). Clique num destino e cole.`);
+}
+
+function cancelarClipboard() {
+  state.clipboardParas = []; state.clipboardModo = null;
+  aplicarMarcasParas();
+  atualizarBarraParas();
+  toast('Cancelado.');
+}
+
+// Aplica uma textCondition a todo o conteúdo do parágrafo (texto + fim de ¶).
+function aplicarCondicaoParagrafo(psr, condSelf) {
+  if (!condSelf) return;
+  const ref = refCondition(condSelf);
+  const total = icml.paragraphBodyText(psr).length;
+  if (total) icml.applyConditionToOffsets(psr, 0, total, ref);
+  icml.applyConditionToBreak(psr, ref);
+}
+
+function colarParas() {
+  if (!state.clipboardParas.length) return;
+  const alvo = state.paraAtivo;
+  if (!alvo) return toast('Clique no parágrafo de destino primeiro.');
+  const copiar = state.clipboardModo === 'copiar';
+  if (!copiar && state.clipboardParas.includes(alvo))
+    return toast('Escolha um parágrafo de destino fora do bloco recortado.');
+  const n = state.clipboardParas.length;
+
+  if (copiar) {
+    const clones = icml.copyParagraphsAfter(state.story, state.clipboardParas, alvo);
+    if (!clones) return toast('Não foi possível colar aqui.');
+    for (const c of clones) aplicarCondicaoParagrafo(c, state.condEdicao);    // "Texto adicionado"
+  } else {
+    if (!icml.moveParagraphsAfter(state.story, state.clipboardParas, alvo))
+      return toast('Não foi possível colar aqui.');
+    for (const p of state.clipboardParas) aplicarCondicaoParagrafo(p, state.condMovido);  // "Texto movido"
+  }
+
+  state.clipboardParas = []; state.clipboardModo = null;
+  state.selBloco = []; state.selAnchor = null;
+  render();                 // reflete a nova ordem/condições e agenda snapshot (undo cobre)
+  atualizarBarraParas();
+  toast(copiar ? `${n} parágrafo(s) copiado(s).` : `${n} parágrafo(s) movido(s).`);
+}
+
 // Corpo editável (parágrafo ou célula) que carrega um dado PSR.
 function acharBodyPorPsr(psr) {
   return [...el.editor.querySelectorAll('.para-body, .tabela td, .tabela th')].find(b => b._psr === psr) || null;
@@ -257,12 +407,41 @@ function aplicarAparencia(elemento, ap) {
     if (!ap.fontSize) elemento.style.fontSize = '0.75em';
   }
   if (ap.backgroundColor) elemento.style.backgroundColor = ap.backgroundColor;
+  // Shading/borda com "largura = texto": a caixa abraça o texto (não a coluna).
+  // O recuo do texto vem de ap.marginLeft (LeftIndent − offset de borda), calculado
+  // no icml.js, para alinhar com os parágrafos vizinhos.
+  if (ap.widthText) {
+    elemento.style.width = 'fit-content';
+    // Se o parágrafo é centralizado/à direita, mantém a caixa junto ao texto.
+    if (ap.textAlign === 'center')     elemento.style.marginLeft = elemento.style.marginRight = 'auto';
+    else if (ap.textAlign === 'right') elemento.style.marginLeft = 'auto';
+  }
   if (ap.borderTop)    elemento.style.borderTop    = ap.borderTop;
   if (ap.borderBottom) elemento.style.borderBottom = ap.borderBottom;
   if (ap.borderLeft)   elemento.style.borderLeft   = ap.borderLeft;
   if (ap.borderRight)  elemento.style.borderRight  = ap.borderRight;
+  // Raio dos cantos vem do estilo (ICML). Sem borda, mantém o arredondamento do
+  // .para-body (foco). A fusão de bordas consecutivas é feita em juntarBordas, que
+  // restaura a borda "limpa" guardada em dataset antes de recalcular.
+  if (ap.borderTop || ap.borderBottom || ap.borderLeft || ap.borderRight) {
+    if (ap.borderRadius != null) elemento.style.borderRadius = ap.borderRadius;
+    const pp = (ap.padding || '').split(/\s+/);
+    elemento.dataset.borda = JSON.stringify({
+      t: ap.borderTop || '', b: ap.borderBottom || '', l: ap.borderLeft || '',
+      r: ap.borderRight || '', radius: ap.borderRadius || '0',
+      merge: ap.mergeBorders !== false,
+      padT: pp[0] || '', padB: pp[2] || pp[0] || ''   // padding topo/base "limpo" (p/ restaurar na fusão)
+    });
+  } else if (ap.backgroundColor && ap.borderRadius != null) {
+    elemento.style.borderRadius = ap.borderRadius;   // cantos do shading (caixa sem borda)
+  }
   if (ap.padding)      elemento.style.padding      = ap.padding;
-  if (ap.underline)   elemento.style.textDecoration = 'underline';
+  if (ap.underline) {
+    elemento.style.textDecorationLine = 'underline';
+    if (ap.underlineColor)     elemento.style.textDecorationColor     = ap.underlineColor;
+    if (ap.underlineThickness) elemento.style.textDecorationThickness = ap.underlineThickness;
+    if (ap.underlineOffset)    elemento.style.textUnderlineOffset     = ap.underlineOffset;
+  }
 }
 
 // ── Renderização ──────────────────────────────────────────────
@@ -280,9 +459,144 @@ function render() {
   ignorarBlurDe(el.editor);   // corpos antigos não devem finalizar edição ao sair
   el.editor.innerHTML = '';
   paras.forEach(p => el.editor.appendChild(renderPara(p, estilos, apPara, apChar)));
+  juntarBordas();
   montarNavegador();
   if (!el.conteudoNavegacao.hidden) montarNavegacaoDoc();
   agendarSnapshot();
+}
+
+// Aproxima o InDesign: parágrafos consecutivos com a MESMA borda só à esquerda
+// têm o vão entre eles removido, para o border-left virar uma linha contínua
+// (o espaçamento do texto fica pelos paddings internos, dentro da borda).
+function juntarBordas() {
+  const wraps = [...el.editor.querySelectorAll('.para')];
+  const corpo = w => w.querySelector('.para-body, .para-objeto');
+  wraps.forEach(w => w.classList.remove('para-continua-borda'));
+
+  // Restaura a borda "limpa" (do estilo, guardada em dataset) antes de recalcular
+  // a fusão — assim re-renders parciais não deixam resíduos das mutações abaixo.
+  const specs = wraps.map(w => {
+    const c = corpo(w);
+    if (!c || !c.dataset.borda) return null;
+    const d = JSON.parse(c.dataset.borda);
+    c.style.borderTop = d.t; c.style.borderBottom = d.b;
+    c.style.borderLeft = d.l; c.style.borderRight = d.r;
+    c.style.borderRadius = d.radius;
+    if (d.padT) c.style.paddingTop = d.padT;       // restaura padding topo/base "limpo"
+    if (d.padB) c.style.paddingBottom = d.padB;
+    return d;
+  });
+  const chave = d => d ? [d.t, d.b, d.l, d.r].join('¦') : null;
+
+  // Funde grupos consecutivos com a MESMA borda: encosta os parágrafos e remove as
+  // linhas/cantos internos, formando um contorno único (como o InDesign faz).
+  let i = 0;
+  while (i < wraps.length) {
+    const k = chave(specs[i]);
+    if (!k) { i++; continue; }
+    // Só encosta o vizinho quando AMBOS têm "mesclar bordas consecutivas" ligado
+    // (MergeConsecutiveParaBorders). Se algum desliga a opção, fica caixa separada.
+    let j = i;
+    while (j + 1 < wraps.length && chave(specs[j + 1]) === k
+           && specs[j].merge !== false && specs[j + 1].merge !== false) j++;
+    if (j > i) {
+      for (let g = i; g <= j; g++) {
+        const c = corpo(wraps[g]);
+        // Espaço interno entre parágrafos do mesmo estilo dentro do box mesclado =
+        // SameParaStyleSpacing (no padding-bottom do de cima; topo do de baixo = 0),
+        // mantendo a borda contínua. Os offsets do box ficam só nas bordas externas.
+        const mesmoAcima  = g > i && wraps[g]._estilo === wraps[g - 1]._estilo;
+        const mesmoAbaixo = g < j && wraps[g]._estilo === wraps[g + 1]._estilo;
+        if (g > i) {                       // não é o primeiro: encosta e some com o topo
+          wraps[g].classList.add('para-continua-borda');
+          c.style.borderTop = 'none';
+          c.style.borderTopLeftRadius = '0';
+          c.style.borderTopRightRadius = '0';
+          if (mesmoAcima && wraps[g].dataset.sameSpacing) c.style.paddingTop = '0';
+        }
+        if (g < j) {                       // não é o último: some com a base
+          c.style.borderBottom = 'none';
+          c.style.borderBottomLeftRadius = '0';
+          c.style.borderBottomRightRadius = '0';
+          if (mesmoAbaixo && wraps[g].dataset.sameSpacing) c.style.paddingBottom = wraps[g].dataset.sameSpacing;
+        }
+      }
+    }
+    i = j + 1;
+  }
+  espacarCaixas();
+  espacarMesmoEstilo();
+  somarMargens();
+}
+
+// No InDesign o espaço entre dois parágrafos é a SOMA do SpaceAfter (de cima) com o
+// SpaceBefore (de baixo) — o CSS, ao contrário, COLAPSA (usa o maior). Este passo
+// recria a soma: onde ambos têm margem, junta as duas no topo do de baixo e zera a
+// base do de cima. Ex.: título de capítulo (SpaceAfter 10mm) + subtítulo
+// (SpaceBefore 10mm) → 20mm. Caixas ficam de fora (espacarCaixas já as ajustou).
+function somarMargens() {
+  const wraps = [...el.editor.querySelectorAll('.para')];
+  const ehCaixa = w => w.classList.contains('para-caixa');
+  for (let i = 1; i < wraps.length; i++) {
+    const prev = wraps[i - 1], cur = wraps[i];
+    if (ehCaixa(prev) || ehCaixa(cur)) continue;
+    const pmb = parseFloat(getComputedStyle(prev).marginBottom) || 0;
+    const cmt = parseFloat(getComputedStyle(cur).marginTop) || 0;
+    if (pmb > 0 && cmt > 0) {
+      cur.style.marginTop = `${(pmb + cmt).toFixed(1)}px`;
+      prev.style.marginBottom = '0px';
+    }
+  }
+}
+
+// "Espaço entre parágrafos do mesmo estilo" (SameParaStyleSpacing): quando dois
+// parágrafos consecutivos têm o mesmo estilo, o gap vem desse valor (menor que os
+// SpaceBefore/After), no lugar do respiro padrão. Ex.: itens de corpo-recuo-bullet.
+// Caixas são tratadas por espacarCaixas (e bordas mescladas exigem 0), então ficam
+// de fora aqui.
+function espacarMesmoEstilo() {
+  const wraps = [...el.editor.querySelectorAll('.para')];
+  for (let i = 1; i < wraps.length; i++) {
+    const w = wraps[i], prev = wraps[i - 1];
+    if (w.classList.contains('para-caixa')) continue;
+    const sp = w.dataset.sameSpacing;
+    if (sp && w._estilo && w._estilo === prev._estilo) w.style.marginTop = sp;
+  }
+}
+
+// Dá um respiro extra entre uma caixa (borda ou shading) e os parágrafos normais
+// vizinhos — o padding interno faz a caixa parecer "vazar" para o texto ao redor.
+// Entre caixas consecutivas (título de destaque + caixa, ou bordas fundidas) o
+// espaço fica zerado, para não abrir vãos dentro de uma mesma unidade.
+function espacarCaixas() {
+  const wraps = [...el.editor.querySelectorAll('.para')];
+  const ehCaixa = w => w && w.classList.contains('para-caixa');
+  const continua = w => w && w.classList.contains('para-continua-borda');
+  wraps.forEach((w, i) => {
+    if (!ehCaixa(w)) return;
+    const sb = parseFloat(w.dataset.spaceBefore) || 0;   // SpaceBefore do estilo (px)
+    const sa = parseFloat(w.dataset.spaceAfter)  || 0;   // SpaceAfter  do estilo (px)
+    // Dentro de um grupo de borda mesclada a margem quebraria o contorno contínuo → 0.
+    // Contra parágrafo normal: SpaceBefore/SpaceAfter com piso de 20px de respiro.
+    // Entre caixas: por padrão encostam (0) — mantém a unidade "cabeçalho + caixa"
+    // (ex.: "Dica prática" sobre a caixa tracejada, onde a de baixo é o CORPO). Mas
+    // quando a caixa de baixo é um TÍTULO (novo bloco), ou a de cima encerra um grupo
+    // mesclado (continua), aplica-se o espaço somado SpaceAfter(cima)+SpaceBefore(baixo),
+    // como o InDesign. Contra parágrafo normal: SpaceBefore com piso de 20px de respiro.
+    // Dentro de um grupo mesclado a margem quebraria o contorno → 0. O gap entre
+    // caixas é controlado pelo topo do de baixo (o de cima zera a base).
+    const prev = wraps[i - 1], next = wraps[i + 1];
+    const saPrev = prev ? (parseFloat(prev.dataset.spaceAfter) || 0) : 0;
+    const novoBloco = w.dataset.titulo === '1' || continua(prev);
+    const top = continua(w) ? 0
+      : ehCaixa(prev) ? (novoBloco ? saPrev + sb : 0)
+      : Math.max(sb, 20);
+    const bot = continua(next) ? 0
+      : ehCaixa(next) ? 0
+      : Math.max(sa, 20);
+    w.style.marginTop    = `${top}px`;
+    w.style.marginBottom = `${bot}px`;
+  });
 }
 
 // Marca os corpos/células dentro de `root` para que o blur disparado ao removê-los
@@ -312,10 +626,15 @@ function renderPara(p, estilos, apPara, apChar) {
   const wrap = document.createElement('div');
   wrap.className = 'para';
   wrap._psr = p.node;
+  wrap._estilo = p.styleSelf;   // p/ espaçamento entre parágrafos do mesmo estilo
   // Parágrafo inteiro removido → colapsa ao ocultar as marcações (versão final).
   if (paragrafoTotalmenteRemovido(p)) wrap.classList.add('para-removida');
   // Marcação da comparação com o DOCX (só do app, sem relação com textCondition).
   if (state.comparacaoPsrs.has(p.node)) wrap.classList.add('para-diferenca');
+  // Seleção de bloco / bloco recortado aguardando colagem.
+  if (state.selBloco.includes(p.node))        wrap.classList.add('para-sel');
+  if (state.clipboardModo === 'recortar' && state.clipboardParas.includes(p.node))
+    wrap.classList.add('para-recortada');
   // Trecho do Word inserido tachado (comparação): estilo NEUTRO 14px — não
   // sabemos com qual estilo formatar, então não herda a aparência do parágrafo.
   const neutra = paragrafoTachadoComparacao(p);
@@ -327,10 +646,29 @@ function renderPara(p, estilos, apPara, apChar) {
     hr.className = 'nova-pagina';
     wrap.appendChild(hr);
   }
-  // Título: mais espaço antes e depois (o de antes um pouco maior).
-  if (paraApTop?.titulo) {
-    wrap.style.marginTop = '30px';
-    wrap.style.marginBottom = '18px';
+  // Título: mais espaço antes e depois (o de antes um pouco maior). NÃO se aplica a
+  // título DENTRO de caixa (parágrafo com borda) — senão abre um vão no meio da
+  // caixa; ali o espaçamento vem do padding e a fusão de bordas cuida do resto.
+  const temBorda = paraApTop && (paraApTop.borderTop || paraApTop.borderBottom || paraApTop.borderLeft || paraApTop.borderRight);
+  const temCaixa = temBorda || !!(paraApTop && paraApTop.backgroundColor);
+  // Caixa (borda ou shading) ganha um respiro extra dos parágrafos normais ao redor,
+  // aplicado em espacarCaixas (que preserva o encosto entre caixas de uma unidade).
+  if (temCaixa) {
+    wrap.classList.add('para-caixa');
+    // Espaço antes/depois do estilo (SpaceBefore/SpaceAfter) é respeitado por
+    // espacarCaixas; sem valor, cai no respiro padrão.
+    if (paraApTop.spaceBefore) wrap.dataset.spaceBefore = paraApTop.spaceBefore;
+    if (paraApTop.spaceAfter)  wrap.dataset.spaceAfter  = paraApTop.spaceAfter;
+    // Caixa-título inicia um novo bloco (não é "corpo" de um cabeçalho acima) →
+    // espacarCaixas dá espaço em vez de encostar.
+    if (paraApTop.titulo) wrap.dataset.titulo = '1';
+  }
+  if (paraApTop?.sameStyleSpacing != null) wrap.dataset.sameSpacing = paraApTop.sameStyleSpacing;
+  if (paraApTop?.titulo && !temCaixa) {
+    // Usa o SpaceBefore/SpaceAfter real do estilo quando houver (ex.: título de
+    // capítulo com SpaceAfter de 10mm); sem valor, cai no respiro padrão de título.
+    wrap.style.marginTop    = paraApTop.spaceBefore || '30px';
+    wrap.style.marginBottom = paraApTop.spaceAfter  || '18px';
   }
 
   // Coluna esquerda (margem): rótulo do estilo do parágrafo. A troca de estilo
@@ -340,8 +678,8 @@ function renderPara(p, estilos, apPara, apChar) {
   const rotulo = document.createElement('button');
   rotulo.className = 'para-estilo';
   rotulo.appendChild(nomeComGrupo(p.styleName));   // grupo em destaque
-  rotulo.title = 'Clique para selecionar este parágrafo';
-  rotulo.addEventListener('click', () => marcarParaAtivo(p.node, wrap));
+  rotulo.title = 'Clique para selecionar · Shift+clique para selecionar até aqui';
+  rotulo.addEventListener('click', e => selecionarRotulo(p.node, wrap, e.shiftKey));
   gutter.appendChild(rotulo);
   wrap.appendChild(gutter);
 
@@ -370,7 +708,21 @@ function renderPara(p, estilos, apPara, apChar) {
   const paraAp = neutra ? null : apPara.get(p.styleSelf);
   aplicarAparencia(body, paraAp);
   if (neutra) body.classList.add('para-comp-neutra');
-  if (paraAp?.bullet) body.classList.add('para-bullet');
+  if (paraAp?.bullet) {
+    body.classList.add('para-bullet');
+    body.dataset.bullet = paraAp.bulletChar || '•';   // caractere do marcador (• padrão)
+    if (paraAp.bulletFont) body.style.setProperty('--bullet-fonte', paraAp.bulletFont);
+    if (paraAp.bulletCor)  body.style.setProperty('--bullet-cor', paraAp.bulletCor);
+    if (paraAp.bulletGap)  body.style.setProperty('--bullet-w', paraAp.bulletGap);
+    // Caixa (padding inline) sobrepõe o padding-left do bullet: soma o recuo do
+    // marcador (largura da tabulação) ao padding esquerdo da caixa para o marcador
+    // não cair sobre o texto e manter-se recuado dentro da caixa.
+    if (paraAp.padding) {
+      const p = paraAp.padding.split(/\s+/);
+      const pl = p[3] || p[1] || p[0] || '0';   // padding-left do shorthand
+      body.style.paddingLeft = `calc(${pl} + var(--bullet-w, 1.6em))`;
+    }
+  }
   // <Br/> é a marca de fim de parágrafo — após splitParagraphsAtBreaks cada PSR
   // tem só o Br terminal, que não é renderizado (cada parágrafo já é um bloco).
   // A quebra de linha forçada (U+2028) é tratada dentro de renderRun.
@@ -500,7 +852,7 @@ function renderRun(inline, run, apChar) {
   // marcações funcionar; "Texto removido" ganha tachado e some ao ocultar.
   // Só as conditions de alteração/remoção são exibidas — as demais (do fluxo
   // editorial no InDesign) não têm relevância aqui e só distrairiam.
-  const relevantes = new Set([state.condEdicao, state.condRemovido].filter(Boolean));
+  const relevantes = new Set([state.condEdicao, state.condRemovido, state.condMovido].filter(Boolean));
   const conds = (run.node.getAttribute('AppliedConditions') || '').split(/\s+/).filter(Boolean);
   const cond = conds.map(c => decodeURIComponent(c)).find(c => relevantes.has(c));
   if (cond) {
@@ -584,16 +936,58 @@ function renderImagem(inline) {
   wrap.className = 'para-imagem';
   const nome = inline.src ? inline.src.split(/[\\/]/).pop() : '(sem caminho)';
   if (inline.src) {
-    const img = document.createElement('img');
-    img.src = '/local-image?path=' + encodeURIComponent(inline.src);
-    img.alt = nome;
-    img.title = inline.src;
-    img.addEventListener('error', () => wrap.replaceChildren(marcadorImagem(nome)));
-    wrap.appendChild(img);
+    const ext = (inline.src.split('.').pop() || '').toLowerCase();
+    if (ext === 'ai' || ext === 'pdf') {
+      // .ai/.pdf: o navegador não renderiza no <img>; rasteriza a 1ª página com a
+      // pdf.js (o .ai salvo com compatibilidade PDF é um PDF válido).
+      wrap.appendChild(marcadorImagem(nome + ' — carregando…'));
+      renderPdfEmCanvas(wrap, inline.src, nome);
+    } else {
+      const img = document.createElement('img');
+      img.src = '/local-image?path=' + encodeURIComponent(inline.src);
+      img.alt = nome;
+      img.title = inline.src;
+      img.addEventListener('error', () => wrap.replaceChildren(marcadorImagem(nome)));
+      wrap.appendChild(img);
+    }
   } else {
     wrap.appendChild(marcadorImagem(nome));
   }
   return wrap;
+}
+
+// Carrega a pdf.js sob demanda (só quando aparece um .ai/.pdf) e memoiza.
+let pdfjsPromise = null;
+function carregarPdfjs() {
+  if (!pdfjsPromise) {
+    pdfjsPromise = import('./vendor/pdf.min.mjs').then(lib => {
+      lib.GlobalWorkerOptions.workerSrc = new URL('./vendor/pdf.worker.min.mjs', import.meta.url).href;
+      return lib;
+    });
+  }
+  return pdfjsPromise;
+}
+
+// Rasteriza a 1ª página de um .ai/.pdf num <canvas> e insere no lugar do marcador.
+// Falha (ex.: .ai sem compatibilidade PDF) → cai no marcador de imagem ausente.
+async function renderPdfEmCanvas(wrap, src, nome) {
+  try {
+    const pdfjsLib = await carregarPdfjs();
+    const pdf = await pdfjsLib.getDocument({
+      url: '/local-image?path=' + encodeURIComponent(src),
+    }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale: 2 });   // 2× p/ nitidez na tela
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.ceil(viewport.width);
+    canvas.height = Math.ceil(viewport.height);
+    canvas.title = src;
+    await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+    wrap.replaceChildren(canvas);
+  } catch (err) {
+    console.warn('Falha ao rasterizar', src, err);
+    wrap.replaceChildren(marcadorImagem(nome));
+  }
 }
 
 function marcadorImagem(nome) {
@@ -1078,6 +1472,7 @@ function rerenderPara(paraEl) {
   const novo = renderPara(p, estilos, apPara, apChar);
   ignorarBlurDe(paraEl);      // o corpo antigo dispara blur ao ser substituído
   paraEl.replaceWith(novo);
+  juntarBordas();
   montarNavegador();
   if (!el.conteudoNavegacao.hidden) montarNavegacaoDoc();
   agendarSnapshot();
@@ -1143,10 +1538,13 @@ function restaurarSnapshot(xml) {
   state.story = story;
   state.condEdicao   = icml.ensureCondition(doc, 'Texto adicionado', [26, 188, 170]);
   state.condRemovido = icml.ensureCondition(doc, 'Texto removido', [235, 87, 87]);
+  state.condMovido   = icml.ensureCondition(doc, 'Texto movido', [124, 92, 255]);
   coresCondicao = icml.conditionColors(doc);
   state.paraAtivo = null;
+  state.selAnchor = null; state.selBloco = []; state.clipboardParas = []; state.clipboardModo = null;
   state.busca.matches = []; state.busca.idx = -1; atualizarContadorBusca();
   render();
+  atualizarBarraParas();
   h.restaurando = false;
   atualizarBotoesHistoria();
 }

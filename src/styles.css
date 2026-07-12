@@ -220,6 +220,45 @@ body.busca-aberta .painel-alteracoes { top: 106px; }
 .para-diferenca .para-body,
 .para-diferenca .para-objeto { background: #fff7ed; box-shadow: -6px 0 0 0 #fb923c; }
 
+/* Seleção de bloco de parágrafos (Shift+clique) e bloco recortado */
+.para-sel .para-body,
+.para-sel .para-objeto { background: #eff6ff; box-shadow: -6px 0 0 0 #3b82f6; }
+.para-recortada { opacity: .55; }
+.para-recortada .para-body,
+.para-recortada .para-objeto { outline: 1px dashed #94a3b8; outline-offset: 2px; }
+
+/* Barra flutuante de recortar/colar parágrafos */
+.barra-paras {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: #1e293b;
+  color: #fff;
+  border-radius: 10px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .25);
+  z-index: 50;
+  font-size: 13px;
+}
+.barra-paras[hidden] { display: none; }
+.barra-paras-info { opacity: .9; }
+.barra-paras-btn {
+  border: 1px solid rgba(255, 255, 255, .3);
+  background: transparent;
+  color: #fff;
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.barra-paras-btn:hover { background: rgba(255, 255, 255, .12); }
+.barra-paras-btn.primario { background: #3b82f6; border-color: #3b82f6; }
+.barra-paras-btn.primario:hover { background: #2563eb; }
+
 /* Comparação: trecho ADICIONADO pelo ICML em relação ao Word → verde. */
 .run-comp-add { background: #bbf7d0; border-radius: 2px; }
 
@@ -365,6 +404,9 @@ body.busca-aberta .painel-alteracoes { top: 106px; }
   padding: 0 6px;
 }
 .para + .para { margin-top: 10px; }
+/* Bordas contínuas: parágrafos consecutivos com a mesma borda-esquerda encostam,
+   formando uma linha vertical única (como o InDesign junta bordas consecutivas). */
+.para.para-continua-borda { margin-top: 0; }
 .para.ativo { background: #eff6ff; border-radius: 6px; }
 
 /* Rótulo do estilo — na margem esquerda, FORA da página */
@@ -427,12 +469,19 @@ body.busca-aberta .painel-alteracoes { top: 106px; }
 .para-body:focus { background: #f8fafc; box-shadow: inset 0 0 0 1px var(--borda); }
 
 /* Parágrafo com lista de marcadores (BulletList no ICML) */
-.para-body.para-bullet { position: relative; padding-left: 1.4em; }
+.para-body.para-bullet { position: relative; padding-left: var(--bullet-w, 1.6em); }
+/* Marcador em fluxo com recuo pendente (hanging indent): a caixa do marcador tem a
+   largura da tabulação do InDesign (marcador→texto), recua toda para dentro do
+   padding e o glifo fica à esquerda — o texto cai na posição do tab e as linhas
+   quebradas alinham com ele. */
 .para-body.para-bullet::before {
-  content: "•";
-  position: absolute;
-  left: 0.35em;
-  color: inherit;
+  content: attr(data-bullet);
+  display: inline-block;
+  width: var(--bullet-w, 1.6em);
+  margin-left: calc(-1 * var(--bullet-w, 1.6em));
+  text-align: left;
+  color: var(--bullet-cor, inherit);
+  font-family: var(--bullet-fonte, inherit);
 }
 
 /* ── Runs com estilo de caractere ── */
@@ -454,7 +503,8 @@ body.busca-aberta .painel-alteracoes { top: 106px; }
 
 /* ── Imagem ── */
 .para-imagem { text-align: center; }
-.para-imagem img {
+.para-imagem img,
+.para-imagem canvas {
   max-width: 60%;
   height: auto;
   border: 1px solid var(--borda);

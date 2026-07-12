@@ -684,6 +684,22 @@ function styleAppearances(doc, tag) {
     const props = resolveStyleProps(el, bySelf);
     out.set(self, appearanceToCss(props, cores, el.getAttribute('Name') || ''));
   }
+  // Cor do marcador vinda do BulletsCharacterStyle (um estilo de caractere): só
+  // faz sentido em estilos de parágrafo. Resolve o FillColor do estilo referido.
+  if (tag === 'ParagraphStyle') {
+    const charBySelf = new Map();
+    for (const el of Array.from(doc.getElementsByTagName('CharacterStyle'))) {
+      const s = el.getAttribute('Self');
+      if (s) charBySelf.set(s, el);
+    }
+    for (const css of out.values()) {
+      if (!css.bulletCharStyleRef) continue;
+      const cel = charBySelf.get(css.bulletCharStyleRef);
+      if (!cel) continue;
+      const cp = resolveStyleProps(cel, charBySelf);
+      if (cp.FillColor && cores.has(cp.FillColor)) css.bulletCor = comTint(cores.get(cp.FillColor), cp.FillTint);
+    }
+  }
   return out;
 }
 
@@ -720,23 +736,63 @@ function resolveStyleProps(el, bySelf, seen = new Set()) {
     FillColor:     el.getAttribute('FillColor'),
     FillTint:      el.getAttribute('FillTint'),
     FontStyle:     el.getAttribute('FontStyle'),
-    Underline:     el.getAttribute('Underline'),
+    Underline:      el.getAttribute('Underline'),
+    UnderlineWeight: el.getAttribute('UnderlineWeight'),
+    UnderlineOffset: el.getAttribute('UnderlineOffset'),
+    UnderlineTint:   el.getAttribute('UnderlineTint'),
+    UnderlineColor:  getPropObject(el, 'UnderlineColor'),
     AppliedFont:   getAppliedFont(el),
     LeftIndent:    el.getAttribute('LeftIndent'),
     RightIndent:   el.getAttribute('RightIndent'),
+    FirstLineIndent: el.getAttribute('FirstLineIndent'),
+    TabPosition:   getFirstTabPosition(el),
+    SpaceBefore:   el.getAttribute('SpaceBefore'),
+    SpaceAfter:    el.getAttribute('SpaceAfter'),
+    SameParaSpacing: getPropObject(el, 'SameParaStyleSpacing'),
     ListType:      el.getAttribute('BulletsAndNumberingListType'),
+    BulletCharValue: getPropAttr(el, 'BulletChar', 'BulletCharacterValue'),
+    BulletsFont:     getPropObject(el, 'BulletsFont'),
+    BulletsCharStyle: getPropObject(el, 'BulletsCharacterStyle'),
     Position:      el.getAttribute('Position'),
     ShadingOn:     el.getAttribute('ParagraphShadingOn'),
     ShadingTint:   el.getAttribute('ParagraphShadingTint'),
     ShadingColor:  getPropObject(el, 'ParagraphShadingColor'),
+    ShadingWidth:  el.getAttribute('ParagraphShadingWidth'),
+    ShadingLeftOffset:  el.getAttribute('ParagraphShadingLeftOffset'),
+    ShadingRightOffset: el.getAttribute('ParagraphShadingRightOffset'),
+    ShadingTopOffset:    el.getAttribute('ParagraphShadingTopOffset'),
+    ShadingBottomOffset: el.getAttribute('ParagraphShadingBottomOffset'),
+    ShadingCornerOptTL: el.getAttribute('ParagraphShadingTopLeftCornerOption'),
+    ShadingCornerOptTR: el.getAttribute('ParagraphShadingTopRightCornerOption'),
+    ShadingCornerOptBR: el.getAttribute('ParagraphShadingBottomRightCornerOption'),
+    ShadingCornerOptBL: el.getAttribute('ParagraphShadingBottomLeftCornerOption'),
+    ShadingRadiusTL: el.getAttribute('ParagraphShadingTopLeftCornerRadius'),
+    ShadingRadiusTR: el.getAttribute('ParagraphShadingTopRightCornerRadius'),
+    ShadingRadiusBR: el.getAttribute('ParagraphShadingBottomRightCornerRadius'),
+    ShadingRadiusBL: el.getAttribute('ParagraphShadingBottomLeftCornerRadius'),
     SplitDocument:  el.getAttribute('SplitDocument'),
     StartParagraph: el.getAttribute('StartParagraph'),
     BorderOn:      el.getAttribute('ParagraphBorderOn'),
+    MergeBorders:  el.getAttribute('MergeConsecutiveParaBorders'),
     BorderColor:   getPropObject(el, 'ParagraphBorderColor'),
+    BorderType:    getPropObject(el, 'ParagraphBorderType'),
+    BorderTint:    el.getAttribute('ParagraphBorderTint'),
     BorderTop:     el.getAttribute('ParagraphBorderTopLineWeight'),
     BorderBottom:  el.getAttribute('ParagraphBorderBottomLineWeight'),
     BorderLeft:    el.getAttribute('ParagraphBorderLeftLineWeight'),
     BorderRight:   el.getAttribute('ParagraphBorderRightLineWeight'),
+    BorderLeftOffset:   el.getAttribute('ParagraphBorderLeftOffset'),
+    BorderRightOffset:  el.getAttribute('ParagraphBorderRightOffset'),
+    BorderTopOffset:    el.getAttribute('ParagraphBorderTopOffset'),
+    BorderBottomOffset: el.getAttribute('ParagraphBorderBottomOffset'),
+    BorderRadiusTL: el.getAttribute('ParagraphBorderTopLeftCornerRadius'),
+    BorderRadiusTR: el.getAttribute('ParagraphBorderTopRightCornerRadius'),
+    BorderRadiusBR: el.getAttribute('ParagraphBorderBottomRightCornerRadius'),
+    BorderRadiusBL: el.getAttribute('ParagraphBorderBottomLeftCornerRadius'),
+    CornerOptTL:    el.getAttribute('ParagraphBorderTopLeftCornerOption'),
+    CornerOptTR:    el.getAttribute('ParagraphBorderTopRightCornerOption'),
+    CornerOptBR:    el.getAttribute('ParagraphBorderBottomRightCornerOption'),
+    CornerOptBL:    el.getAttribute('ParagraphBorderBottomLeftCornerOption'),
   };
   const merged = { ...herdado };
   for (const k in proprio) if (proprio[k] != null) merged[k] = proprio[k];
@@ -760,6 +816,26 @@ function getPropObject(el, tag) {
   if (!props) return null;
   const node = first(childElements(props, tag));
   return node ? node.textContent.trim() : null;
+}
+
+// Posição do primeiro tab (Properties > TabList > ListItem > Position), em pt.
+function getFirstTabPosition(el) {
+  const props = first(childElements(el, 'Properties'));
+  if (!props) return null;
+  const tabList = first(childElements(props, 'TabList'));
+  if (!tabList) return null;
+  const item = first(childElements(tabList, 'ListItem'));
+  if (!item) return null;
+  const pos = first(childElements(item, 'Position'));
+  return pos ? pos.textContent.trim() : null;
+}
+
+// Lê um atributo de um filho de <Properties> (ex.: BulletChar/BulletCharacterValue).
+function getPropAttr(el, tag, attr) {
+  const props = first(childElements(el, 'Properties'));
+  if (!props) return null;
+  const node = first(childElements(props, tag));
+  return node && node.hasAttribute(attr) ? node.getAttribute(attr) : null;
 }
 
 // "Inter 18pt" → "Inter": remove sufixos de tamanho óptico para o nome Google.
@@ -809,34 +885,179 @@ function appearanceToCss(props, cores, name) {
   }
   if (props.LeftIndent  && parseFloat(props.LeftIndent)  > 0) css.marginLeft  = `${parseFloat(props.LeftIndent)  * PT_TO_PX}px`;
   if (props.RightIndent && parseFloat(props.RightIndent) > 0) css.marginRight = `${parseFloat(props.RightIndent) * PT_TO_PX}px`;
-  if (props.ListType === 'BulletList') css.bullet = true;
+  // Espaço antes/depois do parágrafo (SpaceBefore/SpaceAfter, pt→px). Usado no
+  // espaçamento das caixas (espacarCaixas) para respeitar o valor do estilo.
+  if (props.SpaceBefore && parseFloat(props.SpaceBefore) > 0) css.spaceBefore = `${(parseFloat(props.SpaceBefore) * PT_TO_PX).toFixed(1)}px`;
+  if (props.SpaceAfter  && parseFloat(props.SpaceAfter)  > 0) css.spaceAfter  = `${(parseFloat(props.SpaceAfter)  * PT_TO_PX).toFixed(1)}px`;
+  // "Espaço entre parágrafos do mesmo estilo" (SameParaStyleSpacing): usado no lugar
+  // de SpaceBefore/After entre dois parágrafos do MESMO estilo (geralmente menor).
+  if (props.SameParaSpacing != null && props.SameParaSpacing !== '') {
+    const v = parseFloat(props.SameParaSpacing);
+    if (!isNaN(v)) css.sameStyleSpacing = `${(v * PT_TO_PX).toFixed(1)}px`;
+  }
+  if (props.ListType === 'BulletList') {
+    css.bullet = true;
+    // Caractere do marcador (BulletChar): code point Unicode → caractere. Ex.:
+    // 128161 → 💡. Sem valor, o CSS mantém o "•" padrão.
+    const cp = parseInt(props.BulletCharValue, 10);
+    if (cp > 0) { try { css.bulletChar = String.fromCodePoint(cp); } catch { /* code point inválido */ } }
+    // Fonte do marcador (BulletsFont): usa o nome exato + fallbacks de emoji (o
+    // 💡 depende de uma fonte de emoji; "Segoe UI Emoji" existe no Windows).
+    if (props.BulletsFont) {
+      css.bulletFont = `"${props.BulletsFont}", "Apple Color Emoji", "Noto Color Emoji", sans-serif`;
+    }
+    // Estilo de caractere do marcador (BulletsCharacterStyle) → cor. Resolvido em
+    // styleAppearances (precisa do mapa de estilos de caractere).
+    if (props.BulletsCharStyle) css.bulletCharStyleRef = props.BulletsCharStyle;
+    // Distância marcador→texto = posição do 1º tab − início do marcador
+    // (LeftIndent + FirstLineIndent). No InDesign a lista usa um tab após o
+    // marcador; ex.: tab 10mm, marcador em 4mm → 6mm (24px). 4px/mm, piso 10px.
+    const li = parseFloat(props.LeftIndent) || 0;
+    const fli = parseFloat(props.FirstLineIndent) || 0;
+    const tab = parseFloat(props.TabPosition);
+    if (!isNaN(tab)) css.bulletGap = `${Math.max(10, (tab - li - fli) / 2.834645669 * 4).toFixed(1)}px`;
+  }
   if (props.Position === 'Superscript') css.verticalAlign = 'super';
   else if (props.Position === 'Subscript') css.verticalAlign = 'sub';
 
-  // Borda de parágrafo: cada lado tem sua espessura (pt→px direto). Cor de
+  // Borda de parágrafo: cada lado tem sua espessura (pt → px × 2, p/ aproximar a
+  // aparência do InDesign, onde a linha se mostra mais grossa). Cor de
   // ParagraphBorderColor (preto se ausente). Com borda, padding padrão de 6px.
   if (props.BorderOn === 'true') {
-    const cor = (props.BorderColor && cores.get(props.BorderColor)) || 'rgb(0, 0, 0)';
-    const lado = w => { const v = parseFloat(w); return v > 0 ? `${v}px solid ${cor}` : null; };
+    const corBase = (props.BorderColor && cores.get(props.BorderColor)) || 'rgb(0, 0, 0)';
+    const cor = comTint(corBase, props.BorderTint);
+    // Tipo de traço: "Solid" → linha cheia; qualquer outro (ex.: "Japanese Dots",
+    // "Canned Dotted", "Dashed") → tracejado.
+    const traco = /solid/i.test(props.BorderType || 'Solid') ? 'solid' : 'dashed';
+    // Se BorderOn e NENHUM lado tem peso explícito, usa o padrão do InDesign (1pt).
+    const semExplicito = [props.BorderTop, props.BorderBottom, props.BorderLeft, props.BorderRight].every(w => w == null);
+    const lado = w => {
+      let v = parseFloat(w);
+      if (isNaN(v) && semExplicito) v = 1;
+      return v > 0 ? `${v * 2}px ${traco} ${cor}` : null;
+    };
     const bt = lado(props.BorderTop), bb = lado(props.BorderBottom);
     const bl = lado(props.BorderLeft), br = lado(props.BorderRight);
     if (bt) css.borderTop = bt;
     if (bb) css.borderBottom = bb;
     if (bl) css.borderLeft = bl;
     if (br) css.borderRight = br;
-    if (bt || bb || bl || br) css.padding = '12px';
+    if (bt || bb || bl || br) {
+      // (Padding interno e margem da caixa são definidos no bloco unificado abaixo,
+      // que também cobre caixas só com shading.)
+      // Cantos arredondados (raio do ICML, pt→px na escala do editor). Só arredonda
+      // um canto quando: (a) seu CornerOption é RoundedCorner — ausente/None/Bevel
+      // fica reto, mesmo havendo um raio herdado; e (b) os DOIS lados vizinhos têm
+      // borda (uma linha só à esquerda continua reta, sem curvar as pontas).
+      const raio = (v, ok) => { const n = parseFloat(v); return (ok && n > 0) ? `${(n * PT_TO_PX).toFixed(1)}px` : '0'; };
+      const arred = opt => opt === 'RoundedCorner';
+      const tl  = raio(props.BorderRadiusTL, bt && bl && arred(props.CornerOptTL));
+      const tr  = raio(props.BorderRadiusTR, bt && br && arred(props.CornerOptTR));
+      const brr = raio(props.BorderRadiusBR, bb && br && arred(props.CornerOptBR));
+      const blr = raio(props.BorderRadiusBL, bb && bl && arred(props.CornerOptBL));
+      css.borderRadius = (tl === '0' && tr === '0' && brr === '0' && blr === '0') ? '0' : `${tl} ${tr} ${brr} ${blr}`;
+    }
   }
 
-  // Texto branco/muito claro somem na página branca: se o parágrafo tem uma cor
-  // de sombreamento (ParagraphShadingColor), usa-a como fundo; senão, força o
-  // texto a preto para a visualização.
-  if (css.color && corClara(css.color)) {
-    const fundo = props.ShadingColor && cores.get(props.ShadingColor);
-    if (props.ShadingOn !== 'false' && fundo) css.backgroundColor = comTint(fundo, props.ShadingTint);
-    else css.color = 'rgb(0, 0, 0)';
+  // ParagraphShading → fundo do parágrafo. Sempre traduzido quando ligado e com
+  // cor real (Swatch/None não pinta).
+  if (props.ShadingOn === 'true' && props.ShadingColor && props.ShadingColor !== 'Swatch/None'
+      && cores.has(props.ShadingColor)) {
+    css.backgroundColor = comTint(cores.get(props.ShadingColor), props.ShadingTint);
+    // "Largura = texto" (ParagraphShadingWidth=TextWidth): o fundo abraça o texto
+    // em vez de ocupar a coluna inteira → caixa shrink-to-fit.
+    if (props.ShadingWidth === 'TextWidth') {
+      css.widthText = true;
+      // O recuo real do texto (alinhado aos parágrafos vizinhos) é LeftIndent menos
+      // o offset de borda: numa caixa TextWidth o InDesign guarda nesse offset a
+      // compensação de moldura que faz o texto alinhar com os blocos ao redor.
+      const li = parseFloat(props.LeftIndent) || 0;
+      const blo = parseFloat(props.BorderLeftOffset) || 0;
+      // Numa caixa "largura = texto", os offsets do shading estendem o fundo além do
+      // texto em cada lado (ex.: ShadingLeftOffset 6mm → 24px de teal à esquerda do
+      // texto). 4px/mm; pisos pequenos p/ o texto não colar. O padding esquerdo é
+      // compensado na margem para o conteúdo (e o marcador) ficar na mesma posição —
+      // só a caixa se expande.
+      const MM = 2.834645669;
+      const sOff = (off, min) => { const v = Math.abs(parseFloat(off)); return isNaN(v) ? min : Math.max(min, v / MM * 4); };
+      const sl = sOff(props.ShadingLeftOffset, 5), sr = sOff(props.ShadingRightOffset, 5);
+      const st = sOff(props.ShadingTopOffset, 4),  sb = sOff(props.ShadingBottomOffset, 4);
+      if (css.bullet && css.bulletGap) {
+        // Lista com tab: a caixa começa a ShadingLeftOffset da margem da página (sem
+        // vazar para fora dela), com uma base pequena de 2px até o marcador; o texto
+        // cai na posição do tab via --bullet-w (somado ao padding no app.js).
+        css.padding = `${st.toFixed(1)}px ${sr.toFixed(1)}px ${sb.toFixed(1)}px 2px`;
+        css.marginLeft = `${sl.toFixed(1)}px`;
+      } else {
+        css.padding = `${st.toFixed(1)}px ${sr.toFixed(1)}px ${sb.toFixed(1)}px ${sl.toFixed(1)}px`;
+        css.marginLeft = `${((li - blo) * PT_TO_PX - (sl - 5)).toFixed(1)}px`;
+      }
+    }
+  }
+  // Padding interno das caixas (borda e/ou shading). Gap borda↔texto = magnitude do
+  // offset de cada lado (|offset|, positivo ou negativo): 11pt/4mm → 16px (4px/mm).
+  // Usa o offset de borda quando há borda no estilo, senão o de shading; sem offset,
+  // piso de 5px de respiro. Recua a margem esquerda/direita pelo excedente sobre 5px
+  // para o texto permanecer no LeftIndent (a borda é que se afasta). Só ColumnWidth;
+  // TextWidth (abraça o texto) já teve o padding definido acima.
+  const temBorda = !!(css.borderTop || css.borderBottom || css.borderLeft || css.borderRight);
+  const ehCaixaColuna = (temBorda || !!css.backgroundColor)
+    && props.BorderWidth !== 'TextWidth' && props.ShadingWidth !== 'TextWidth';
+  if (ehCaixaColuna) {
+    const MM = 2.834645669;   // pt por mm
+    const usaBorda = props.BorderOn === 'true';
+    const off = (bo, so) => parseFloat(usaBorda ? bo : so) || 0;   // offset em pt (0 se ausente)
+    const li = parseFloat(props.LeftIndent) || 0, ri = parseFloat(props.RightIndent) || 0;
+    // ColumnWidth: as bordas esq/dir ficam na coluna e o texto é recuado pelo Indent
+    // → gap = Indent + Offset (offset negativo aproxima a borda do texto). Topo/base
+    // ficam rente ao texto → gap = |offset|. Escala 4px/mm (11pt/4mm → 16px), piso 5px.
+    const px    = pt => Math.max(5, pt / MM * 4);
+    const pxAbs = pt => Math.max(5, Math.abs(pt) / MM * 4);
+    const pL = px(li + off(props.BorderLeftOffset,  props.ShadingLeftOffset));
+    const pR = px(ri + off(props.BorderRightOffset, props.ShadingRightOffset));
+    const pT = pxAbs(off(props.BorderTopOffset,     props.ShadingTopOffset));
+    const pB = pxAbs(off(props.BorderBottomOffset,  props.ShadingBottomOffset));
+    css.padding = `${pT.toFixed(1)}px ${pR.toFixed(1)}px ${pB.toFixed(1)}px ${pL.toFixed(1)}px`;
+    // Mantém o texto na posição atual (LeftIndent + respiro) recuando a borda p/ fora.
+    css.marginLeft  = `${Math.max(0, li * PT_TO_PX - (pL - 5)).toFixed(1)}px`;
+    css.marginRight = `${Math.max(0, ri * PT_TO_PX - (pR - 5)).toFixed(1)}px`;
   }
 
-  css.underline = props.Underline === 'true' || /sublinhad|underline/i.test(name);
+  // Cantos do shading: cada canto só arredonda quando seu CornerOption é
+  // RoundedCorner (ausente/None/Bevel fica reto). Ex.: "Dica prática" tem topo
+  // arredondado e base reta. Só aplica quando há fundo e a borda ainda não definiu
+  // o raio (a borda tem precedência quando existe).
+  if (css.backgroundColor && css.borderRadius == null) {
+    const arred = opt => opt === 'RoundedCorner';
+    const raio = (v, ok) => { const n = parseFloat(v); return (ok && n > 0) ? `${(n * PT_TO_PX).toFixed(1)}px` : '0'; };
+    const tl  = raio(props.ShadingRadiusTL, arred(props.ShadingCornerOptTL));
+    const tr  = raio(props.ShadingRadiusTR, arred(props.ShadingCornerOptTR));
+    const brr = raio(props.ShadingRadiusBR, arred(props.ShadingCornerOptBR));
+    const blr = raio(props.ShadingRadiusBL, arred(props.ShadingCornerOptBL));
+    if (!(tl === '0' && tr === '0' && brr === '0' && blr === '0')) {
+      css.borderRadius = `${tl} ${tr} ${brr} ${blr}`;
+    }
+  }
+
+  // Texto muito claro SEM fundo próprio some na página branca → força preto.
+  if (css.color && corClara(css.color) && !css.backgroundColor) css.color = 'rgb(0, 0, 0)';
+
+  // "Mesclar bordas/sombreamento consecutivos com as mesmas configurações"
+  // (MergeConsecutiveParaBorders no ICML). Ligado por padrão no InDesign — só não
+  // funde parágrafos vizinhos quando o estilo desliga a opção explicitamente.
+  css.mergeBorders = props.MergeBorders !== 'false';
+
+  // Underline: aplica e, quando o ICML define, traduz cor, espessura (pt→px ×2,
+  // como as bordas) e deslocamento.
+  if (props.Underline === 'true' || /sublinhad|underline/i.test(name)) {
+    css.underline = true;
+    if (props.UnderlineColor && cores.has(props.UnderlineColor))
+      css.underlineColor = comTint(cores.get(props.UnderlineColor), props.UnderlineTint);
+    const uw = parseFloat(props.UnderlineWeight);
+    if (uw > 0) css.underlineThickness = `${(uw * 2).toFixed(1)}px`;
+    const uo = parseFloat(props.UnderlineOffset);
+    if (!isNaN(uo)) css.underlineOffset = `${(uo * PT_TO_PX).toFixed(1)}px`;
+  }
 
   // Estilos de título (pelo nome/grupo) ganham mais espaço antes e depois — o
   // de antes um pouco maior. SplitDocument="true" ou StartParagraph="NextOddPage"
@@ -948,12 +1169,33 @@ function comTint(css, tint) {
   return `rgb(${mix(rgb[0])}, ${mix(rgb[1])}, ${mix(rgb[2])})`;
 }
 
+// Conversão CMYK→RGB por modelo linear de tintas ("block-dye"), calibrado contra
+// o InDesign: RGB = branco − Σ (tinta · vetor de absorção da tinta). A fórmula
+// ingênua (255·(1−x)·(1−k)) assume tintas perfeitas e puxa os cianos para o
+// verde; os vetores abaixo foram aferidos a olho a partir de pontos calibrados:
+//   • Magenta puro CMYK(0,100,0,0) → rgb(237,2,163)  ⇒ A_M = (18, 253, 92)
+//   • Amarelo puro CMYK(0,0,100,0) → rgb(249,227,55) ⇒ A_Y = (6, 28, 200)
+//   • Preto CMYK(0,0,0,50) → rgb(127,127,127)        ⇒ A_K = (256, 256, 256)
+//     (K=50 → 127 e K=100 → 0 por clamp; cinza/preto por K seguem neutros)
+//   • "projeto ciano" CMYK(93,25,16,2) → rgb(68,159,233), com A_M/A_Y/A_K aferidos
+//     resolve A_C = (188.85, 23.67, −42.23) (ciano do InDesign: mais azul e menos
+//     verde). A_C é re-resolvido sempre que A_M/A_Y/A_K mudam.
+// Reproduz os pontos calibrados exatamente; vale p/ uso direto, tintas mistas e
+// derivadas por tint. Estender/reajustar com novos pontos.
+const TINTA_ABS = {
+  C: [188.85, 23.67, -42.23],
+  M: [18, 253, 92],
+  Y: [6, 28, 200],
+  K: [256, 256, 256],
+};
+
 function cmykToRgb(c, m, y, k) {
   c /= 100; m /= 100; y /= 100; k /= 100;
-  const r = Math.round(255 * (1 - c) * (1 - k));
-  const g = Math.round(255 * (1 - m) * (1 - k));
-  const b = Math.round(255 * (1 - y) * (1 - k));
-  return `rgb(${r}, ${g}, ${b})`;
+  const canal = i => {
+    const v = 255 - (c * TINTA_ABS.C[i] + m * TINTA_ABS.M[i] + y * TINTA_ABS.Y[i] + k * TINTA_ABS.K[i]);
+    return Math.max(0, Math.min(255, Math.round(v)));
+  };
+  return `rgb(${canal(0)}, ${canal(1)}, ${canal(2)})`;
 }
 
 // ── Operações de parágrafo ────────────────────────────────────
@@ -1013,6 +1255,47 @@ export function splitParagraphAtOffset(doc, story, psr, offset) {
   psr.parentNode.insertBefore(novo, psr.nextSibling);
   ensureParagraphBreaks(story);
   return novo;
+}
+
+/** Lista os parágrafos (PSRs de topo) da story, em ordem de documento. */
+export function paragraphList(story) {
+  return childElements(story, 'ParagraphStyleRange');
+}
+
+/**
+ * Move os parágrafos `psrNodes` (na ordem dada) para logo depois de `alvoPsr`,
+ * preservando estilo/atributos/conteúdo de cada um. Recusa se `alvoPsr` estiver
+ * entre os movidos. Retorna true se moveu.
+ */
+export function moveParagraphsAfter(story, psrNodes, alvoPsr) {
+  if (!psrNodes || !psrNodes.length || !alvoPsr) return false;
+  if (psrNodes.indexOf(alvoPsr) !== -1) return false;
+  let ref = alvoPsr;
+  for (const psr of psrNodes) {
+    if (psr.parentNode) psr.parentNode.removeChild(psr);
+    ref.parentNode.insertBefore(psr, ref.nextSibling);
+    ref = psr;
+  }
+  ensureParagraphBreaks(story);
+  return true;
+}
+
+/**
+ * Duplica os parágrafos `psrNodes` (clone profundo) logo depois de `alvoPsr`,
+ * na ordem dada. Retorna os clones inseridos (ou null se inválido).
+ */
+export function copyParagraphsAfter(story, psrNodes, alvoPsr) {
+  if (!psrNodes || !psrNodes.length || !alvoPsr) return null;
+  const clones = [];
+  let ref = alvoPsr;
+  for (const psr of psrNodes) {
+    const clone = psr.cloneNode(true);
+    ref.parentNode.insertBefore(clone, ref.nextSibling);
+    ref = clone;
+    clones.push(clone);
+  }
+  ensureParagraphBreaks(story);
+  return clones;
 }
 
 /** Funde `psr` no parágrafo anterior (para Backspace no início). */

@@ -20,6 +20,7 @@ import {
   markOrphanRunsRemoved, insertRemovedRun, contentStartOffset,
   hasLiveTextFrom, findMatchesInParagraph, replaceRange,
   headingLevels,
+  moveParagraphsAfter, copyParagraphsAfter, paragraphList,
 } from '../src/icml.js';
 
 // Encontra a primeira <Table> na story.
@@ -377,8 +378,8 @@ test('MixedInk combina as tintas (Process Black + spot) pela InkList/InkPercenta
     <Story Self="s"></Story></Document>`;
   const { doc } = parseIcml(xml, DOMParser);
   const ap = paragraphStyleAppearances(doc);
-  // CMYK combinado = (25, 0, 100, 30) → verde-limão escurecido
-  assert.equal(ap.get('ParagraphStyle/tm').color, 'rgb(134, 179, 0)', 'verde limão + 30% preto');
+  // CMYK combinado = (25, 0, 100, 30) → verde-limão escurecido (modelo de tintas)
+  assert.equal(ap.get('ParagraphStyle/tm').color, 'rgb(125, 144, 0)', 'verde limão + 30% preto');
 });
 
 test('FillTint aplica intensidade sobre a cor (preto 80% → cinza), -1/100 = cheio', () => {
@@ -428,22 +429,25 @@ test('lê imagem (Rectangle GraphicType) e extrai o caminho do LinkResourceURI',
   assert.match(out, /LinkResourceURI="file:C:\/x\/Imagem%20Teste\.png"/);
 });
 
-test('borda de parágrafo: espessura por lado (pt→px), cor e padding 6px', () => {
+test('borda de parágrafo: espessura por lado (pt→px ×2), cor e padding', () => {
   const { doc } = carregar();
   const ap = paragraphStyleAppearances(doc);
   const selfDe = nome => listParagraphStyles(doc).find(s => s.name === nome).self;
 
-  // Borda esquerda de 3px (ciano) com padding 6px
+  // Borda esquerda de 3pt → 6px (×2, ciano) com padding. O "projeto ciano"
+  // (CMYK 93/25/16/2) é calibrado manualmente para o azul aferido do InDesign.
   const esq = ap.get(selfDe('miolo:destaque 1 miolo'));
-  assert.equal(esq.borderLeft, '3px solid rgb(18, 187, 209)');
-  assert.equal(esq.padding, '12px');
+  assert.equal(esq.borderLeft, '6px solid rgb(68, 159, 233)');
+  // Padding por lado = -BorderOffset (4mm → 16px nas laterais); topo/base sem
+  // offset ficam no respiro padrão de 5px.
+  assert.equal(esq.padding, '5.0px 16.0px 5.0px 16.0px');
   assert.equal(esq.borderTop, undefined);
   assert.equal(esq.borderRight, undefined);
 
-  // Borda inferior de 1.5px
+  // Borda inferior de 1.5pt → 3px (×2)
   const inf = ap.get(selfDe('miolo:fig-tab-titulo-arte'));
-  assert.match(inf.borderBottom, /^1\.5px solid rgb\(/);
-  assert.equal(inf.padding, '12px');
+  assert.match(inf.borderBottom, /^3px solid rgb\(/);
+  assert.equal(inf.padding, '4.0px 8.0px 4.0px 8.0px');   // TextWidth → offsets do shading
 
   // Estilo sem borda não recebe padding do bordado
   assert.equal(ap.get(selfDe('miolo:corpo')).borderLeft, undefined);
@@ -719,4 +723,59 @@ test('inserir nota adiciona uma <Note> nova sem quebrar o resto', () => {
 
   assert.equal(describe(out).notes, describe(original).notes + 1, 'uma nota a mais');
   assert.match(out, /<Content>Revisar esta frase<\/Content>/);
+});
+
+test('moveParagraphsAfter move um bloco para depois do alvo e mantém o invariante de Br', () => {
+  const { doc, story, paras } = carregar();
+  const total = paras.length;
+  assert.ok(total >= 4, 'fixture precisa de ≥4 parágrafos');
+
+  const bloco = [paras[0].node, paras[1].node];   // dois primeiros parágrafos
+  const alvo  = paras[total - 1].node;            // último parágrafo
+
+  assert.equal(moveParagraphsAfter(story, bloco, alvo), true);
+
+  const ordem = childPSRs(story);
+  assert.equal(ordem.length, total, 'nº de parágrafos não muda');
+  assert.equal(brTerminais(story), total - 1, 'invariante de Br: (parágrafos − 1) quebras');
+
+  const i = ordem.indexOf(alvo);
+  assert.equal(ordem[i + 1], bloco[0], 'bloco vem logo após o alvo, em ordem');
+  assert.equal(ordem[i + 2], bloco[1]);
+
+  // paragraphList reflete a nova ordem e o round-trip serializa sem erro.
+  assert.equal(paragraphList(story).length, total);
+  assert.ok(serializeIcml(doc, XMLSerializer).includes('ParagraphStyleRange'));
+});
+
+test('moveParagraphsAfter recusa alvo dentro do próprio bloco', () => {
+  const { story, paras } = carregar();
+  const bloco = [paras[0].node, paras[1].node];
+  assert.equal(moveParagraphsAfter(story, bloco, paras[1].node), false);
+});
+
+test('copyParagraphsAfter duplica o bloco após o alvo e mantém o invariante de Br', () => {
+  const { doc, story, paras } = carregar();
+  const total = paras.length;
+  const bloco = [paras[1].node, paras[2].node];
+  const alvo  = paras[total - 1].node;
+  const t1 = textoDe(paras[1]), t2 = textoDe(paras[2]);
+
+  const clones = copyParagraphsAfter(story, bloco, alvo);
+  assert.equal(clones.length, 2);
+
+  const ordem = childPSRs(story);
+  assert.equal(ordem.length, total + 2, 'dois parágrafos a mais');
+  assert.equal(brTerminais(story), ordem.length - 1, 'invariante de Br');
+
+  const i = ordem.indexOf(alvo);
+  assert.equal(ordem[i + 1], clones[0], 'clones vêm logo após o alvo, em ordem');
+  assert.equal(ordem[i + 2], clones[1]);
+
+  // Clones têm o mesmo texto dos originais; originais permanecem no lugar.
+  const paras2 = readParagraphs(doc, story);
+  const txtDoNode = node => textoDe(paras2.find(p => p.node === node));
+  assert.equal(txtDoNode(clones[0]), t1);
+  assert.equal(txtDoNode(clones[1]), t2);
+  assert.equal(txtDoNode(bloco[0]), t1, 'original permanece');
 });

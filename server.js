@@ -17,8 +17,11 @@ const MIME = {
   '.css': 'text/css', '.icml': 'application/xml', '.xml': 'application/xml', '.json': 'application/json',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.gif': 'image/gif',
   '.webp': 'image/webp', '.svg': 'image/svg+xml', '.tif': 'image/tiff', '.tiff': 'image/tiff',
+  // .ai (Illustrator) salvo com compatibilidade PDF é, na prática, um PDF → o cliente
+  // rasteriza com a pdf.js. Servido como application/pdf.
+  '.pdf': 'application/pdf', '.ai': 'application/pdf',
 };
-const IMG = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.tif', '.tiff']);
+const IMG = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg', '.tif', '.tiff', '.pdf', '.ai']);
 
 async function handler(req, res) {
   const url = new URL(req.url, 'http://localhost');
