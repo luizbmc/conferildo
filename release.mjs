@@ -23,7 +23,9 @@ const ROOT = new URL('.', import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$
 const p = (rel) => `${ROOT}${rel}`;
 
 function sh(cmd, opts = {}) {
-  return execSync(cmd, { cwd: ROOT, encoding: 'utf8', ...opts }).trim();
+  // Com stdio:'inherit' o execSync retorna null (não captura a saída) → trata.
+  const out = execSync(cmd, { cwd: ROOT, encoding: 'utf8', ...opts });
+  return (out || '').trim();
 }
 function die(msg) { console.error('\n✖ ' + msg); process.exit(1); }
 
