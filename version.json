@@ -1,5 +1,5 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "url": "https://github.com/luizbmc/conferildo/releases",
-  "notas": "Versão inicial do Conferildo."
+  "notas": "Renderização muito mais fiel ao InDesign: bordas e sombreamento (cor, tipo de traço, cantos, largura=texto), cores CMYK calibradas, marcadores de lista (caractere, fonte, cor e tabulação) e espaçamento entre parágrafos (SpaceBefore/After somados, SameParaStyleSpacing). Passa a exibir imagens .ai/.pdf."
 }

@@ -1,6 +1,6 @@
 {
   "name": "revisor-provas",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "description": "Editor web de ICML para revisão de provas — edita texto, estilos e notas preservando a formatação do InDesign.",
