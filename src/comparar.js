@@ -28,7 +28,9 @@ const norm = s => (s || '').replace(/\s+/g, ' ').trim();   // p/ exibição (col
 
 // Chave de IGUALDADE de texto. "Ignorar espaços" significa:
 //  • quebras de linha/parágrafo (e parágrafos vazios seguidos), hífen opcional
-//    (soft-hyphen) e caracteres de largura zero → contam como NADA (concatenam);
+//    (soft-hyphen) e caracteres de largura zero → contam como NADA (concatenam).
+//    O espaço colado na quebra vai junto: "pneumonia. ⏎Exames" == "pneumonia.⏎Exames"
+//    (um espaço antes/depois da quebra é invisível e não é alteração de texto);
 //  • tipos de espaço (comum, não-separável, tab) e espaço duplo → um único espaço.
 // Um espaço ENTRE palavras continua significativo: "ENERGIA LIMPA" ≠ "ENERGIALIMPA".
 // Aspas e apóstrofos de qualquer tipo (tipográficos, guillemets, primos, acento
@@ -38,7 +40,8 @@ const ASPAS_SIMPLES = '\u2018\u2019\u201a\u201b\u2032\u2035\u00b4\u0060';
 const ASPAS_DUPLAS  = '\u201c\u201d\u201e\u201f\u2033\u00ab\u00bb\u2039\u203a';
 const RE_ASPAS = new RegExp(`[${ASPAS_SIMPLES}${ASPAS_DUPLAS}]`, 'g');
 const chave = s => (s || '')
-  .replace(/[\r\n\u2028\u2029\u00ad\u200b\ufeff]+/g, '')
+  .replace(/[ \t\u00a0]*[\r\n\u2028\u2029]+[ \t\u00a0]*/g, '')
+  .replace(/[\u00ad\u200b\ufeff]+/g, '')
   .replace(RE_ASPAS, c => (ASPAS_SIMPLES.includes(c) ? "'" : '"'))
   .replace(/\s+/g, ' ')
   .trim();

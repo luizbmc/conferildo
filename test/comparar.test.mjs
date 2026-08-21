@@ -141,6 +141,14 @@ test('tabela: quebra de linha na célula (Word) == concatenado (ID) não acusa',
   assert.deepEqual(r, []);
 });
 
+test('espaço colado na quebra de linha é ignorado', () => {
+  // Fim de parágrafo com espaço sobrando no Word × sem espaço no InDesign.
+  assert.deepEqual(comparar([tabela([['pneumonia. \nExames de sangue']])],
+                            [tabela([['pneumonia.Exames de sangue']])]), []);
+  assert.deepEqual(comparar([para('primeira linha \n segunda linha')],
+                            [para('primeira linhasegunda linha')]), []);
+});
+
 // ── Aspas tipográficas, enumerador automático e hyperlink ─────
 
 test('troca de aspas retas por tipográficas não acusa', () => {
