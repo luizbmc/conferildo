@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { comparar } from '../src/comparar.js';
+import { DOMParser } from '@xmldom/xmldom';
+import { comparar, icmlBlocks } from '../src/comparar.js';
+import { parseIcml, splitParagraphsAtBreaks } from '../src/icml.js';
 
 // Constrói um bloco de parágrafo. `emph` = { bold:[[ini,fim]...], italic:[[...]] }.
 function para(text, emph = {}) {
@@ -137,4 +139,105 @@ test('tabelas: nº de células e texto de cada célula', () => {
 test('tabela: quebra de linha na célula (Word) == concatenado (ID) não acusa', () => {
   const r = comparar([tabela([['ENERGIA\nLIMPA']])], [tabela([['ENERGIALIMPA']])]);
   assert.deepEqual(r, []);
+});
+
+// ── Aspas tipográficas, enumerador automático e hyperlink ─────
+
+test('troca de aspas retas por tipográficas não acusa', () => {
+  assert.deepEqual(comparar([para('a peça do "Assediômetro" é a chave')],
+                            [para('a peça do \u201cAssediômetro\u201d é a chave')]), []);
+  assert.deepEqual(comparar([para("Mont'Alvão, Cláudia")],
+                            [para('Mont\u2019Alvão, Cláudia')]), []);
+  // guillemets e primo também
+  assert.deepEqual(comparar([para('o «texto» dela')], [para('o "texto" dela')]), []);
+});
+
+test('diferença REAL dentro das aspas continua acusando', () => {
+  const r = comparar([para('a peça do "Assediômetro"')], [para('a peça do \u201cAssediometro\u201d')]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].tipo, 'texto');
+});
+
+test('enumerador automático do Word × número gravado no ICML não acusa', () => {
+  // No Word o número vem da numeração automática (não sai no texto extraído);
+  // no InDesign está gravado como texto, com tabulação.
+  assert.deepEqual(comparar([para('Protagonismo climático e COP30')],
+                            [para('1.4.\tProtagonismo climático e COP30')]), []);
+  assert.deepEqual(comparar([para('Cronograma')], [para('2.1 Cronograma')]), []);
+  assert.deepEqual(comparar([para('Não sei.')], [para('C. Não sei.')]), []);
+  assert.deepEqual(comparar([para('criar um corpus brasileiro')], [para('1. criar um corpus brasileiro')]), []);
+  // numeração literal dos dois lados, com pontuação diferente
+  assert.deepEqual(comparar([para('7.6.. Governança de conteúdo')], [para('7.6. Governança de conteúdo')]), []);
+});
+
+test('enumerador ignorado não engole texto que só parece número', () => {
+  // "A construção" / "Civil." não são enumeradores: a diferença tem de aparecer
+  const r = comparar([para('A construção do ethos')], [para('A construção do ethas')]);
+  assert.equal(r.length, 1);
+  const r2 = comparar([para('Civil. O texto original')], [para('Civil. O texto originaL alterado')]);
+  assert.equal(r2.length, 1);
+});
+
+test('título numerado alterado de verdade acusa, sem marcar o número', () => {
+  const r = comparar([para('Protagonismo climático e COP30')],
+                     [para('1.4.\tProtagonismo climático e COP29')]);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].tipo, 'texto');
+  const texto = '1.4.\tProtagonismo climático e COP29';
+  const [gs, ge] = r[0].green[0];
+  assert.equal(texto.slice(gs, ge), 'COP29', 'o verde marca a palavra trocada, não o número');
+});
+
+// ── Texto de hyperlink no ICML ────────────────────────────────
+
+// ICML mínimo: um PSR com dois parágrafos (separados por <Br/>) e um
+// <HyperlinkTextSource> — como o InDesign grava — no SEGUNDO parágrafo.
+const ICML_LINK = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Document>
+  <Story Self="s1">
+    <ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/texto">
+      <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
+        <Content>Primeiro paragrafo sobre o tema.</Content>
+        <Br />
+        <Content>No plano internacional, a </Content>
+      </CharacterStyleRange>
+      <HyperlinkTextSource Self="u1" Name="Origem 1">
+        <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
+          <Content>Norma Tecnica ISO 24495-1</Content>
+        </CharacterStyleRange>
+      </HyperlinkTextSource>
+      <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
+        <Content> consolidou principios.</Content>
+      </CharacterStyleRange>
+    </ParagraphStyleRange>
+  </Story>
+</Document>`;
+
+function blocosDoIcmlLink() {
+  const { doc, story } = parseIcml(ICML_LINK, DOMParser);
+  splitParagraphsAtBreaks(story);   // <Br/> = fim de parágrafo, como o app faz ao abrir
+  return icmlBlocks(doc, story);
+}
+
+test('texto de hyperlink entra no parágrafo certo e não acusa diferença', () => {
+  const ip = blocosDoIcmlLink();
+  assert.equal(ip.length, 2, 'dois parágrafos');
+  assert.equal(ip[0].text, 'Primeiro paragrafo sobre o tema.', 'o link não vaza para o parágrafo anterior');
+  assert.equal(ip[1].text, 'No plano internacional, a Norma Tecnica ISO 24495-1 consolidou principios.');
+
+  const wp = [para('Primeiro paragrafo sobre o tema.'),
+              para('No plano internacional, a Norma Tecnica ISO 24495-1 consolidou principios.')];
+  assert.deepEqual(comparar(wp, ip), [], 'o hyperlink deixa de gerar falso positivo');
+});
+
+test('parágrafo com hyperlink: diferença real acusa, mas sem marcas por trecho', () => {
+  const ip = blocosDoIcmlLink();
+  const wp = [para('Primeiro paragrafo sobre o tema.'),
+              para('No plano internacional, a Norma Tecnica ISO 24495-1 consolidou diretrizes.')];
+  const r = comparar(wp, ip);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].tipo, 'texto');
+  // O editor não renderiza o texto do link → os offsets não batem: sem verde/tachado.
+  assert.deepEqual(r[0].green, []);
+  assert.deepEqual(r[0].cuts, []);
 });

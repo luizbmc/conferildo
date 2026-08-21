@@ -8,6 +8,15 @@
 // parágrafo (um trecho) presente no Word e ausente no InDesign. Ênfase de
 // parágrafo INTEIRO (título todo em negrito, assinatura toda em itálico) é opção
 // de estilo e é ignorada.
+//
+// Também são ignorados, por serem trocas típicas da diagramação e não alteração
+// de conteúdo:
+//  • TIPO DE ASPAS/APÓSTROFO — o InDesign converte as retas do Word em
+//    tipográficas ("aspas" → “aspas”, Mont'Alvão → Mont’Alvão);
+//  • ENUMERADOR no início do parágrafo — no Word os títulos e listas costumam usar
+//    numeração AUTOMÁTICA (não sai no texto) e no InDesign o número está gravado
+//    como texto ("1.4.\tProtagonismo…"). O número em si não é comparado; o texto
+//    do título, sim.
 
 import * as icml from './icml.js';
 
@@ -22,10 +31,28 @@ const norm = s => (s || '').replace(/\s+/g, ' ').trim();   // p/ exibição (col
 //    (soft-hyphen) e caracteres de largura zero → contam como NADA (concatenam);
 //  • tipos de espaço (comum, não-separável, tab) e espaço duplo → um único espaço.
 // Um espaço ENTRE palavras continua significativo: "ENERGIA LIMPA" ≠ "ENERGIALIMPA".
+// Aspas e apóstrofos de qualquer tipo (tipográficos, guillemets, primos, acento
+// agudo usado como apóstrofo) são reduzidos à forma reta — trocá-los é decisão
+// tipográfica da diagramação, não mudança de texto.
+const ASPAS_SIMPLES = '\u2018\u2019\u201a\u201b\u2032\u2035\u00b4\u0060';
+const ASPAS_DUPLAS  = '\u201c\u201d\u201e\u201f\u2033\u00ab\u00bb\u2039\u203a';
+const RE_ASPAS = new RegExp(`[${ASPAS_SIMPLES}${ASPAS_DUPLAS}]`, 'g');
 const chave = s => (s || '')
   .replace(/[\r\n\u2028\u2029\u00ad\u200b\ufeff]+/g, '')
+  .replace(RE_ASPAS, c => (ASPAS_SIMPLES.includes(c) ? "'" : '"'))
   .replace(/\s+/g, ' ')
   .trim();
+
+// Enumerador no INÍCIO do parágrafo: "1.", "1.4.", "2.10.", "7.6..", "2.1", "A.",
+// "b)", "IV." — seguido de espaço/tab. É o número de um título ou item de lista;
+// no Word vem da numeração automática (invisível no texto extraído) e no InDesign
+// costuma estar gravado como texto. Ignorado nas comparações de parágrafo.
+const ROMANO = '(?=[IVXLCDMivxlcdm])[Mm]{0,3}(?:[Cc][MmDd]|[Dd]?[Cc]{0,3})(?:[Xx][CcLl]|[Ll]?[Xx]{0,3})(?:[Ii][XxVv]|[Vv]?[Ii]{0,3})';
+const RE_ENUMERADOR = new RegExp(`^[\\s\\u00a0]*(?:\\d+(?:[.)]\\d+)*[.)]*|[A-Za-z][.)]|${ROMANO}[.)])[\\s\\u00a0]+`);
+const tamEnumerador = s => (RE_ENUMERADOR.exec(s || '') || [''])[0].length;
+const semEnumerador = s => (s || '').slice(tamEnumerador(s));
+// Chave de igualdade de um PARÁGRAFO (texto sem o enumerador inicial).
+const chaveParagrafo = s => chave(semEnumerador(s));
 
 // ── Extração dos blocos do ICML (mesma forma que docx.js) ─────
 export function icmlBlocks(doc, story) {
@@ -37,21 +64,27 @@ export function icmlBlocks(doc, story) {
     if (tabela) { blocks.push({ ...icmlTableBlock(doc, tabela.node), psr: p.node }); continue; }
 
     const temImagem = inlines.some(i => i.type === 'image');
-    const chars = extrairCharsICML(p.node, p.styleSelf, fs);
+    const { chars, linkOculto } = extrairCharsICML(p.node, p.styleSelf, fs);
     if (temImagem && !chars.some(c => c.c.trim())) { blocks.push({ type: 'para', text: '', chars: [], hasImage: true, psr: p.node }); continue; }
-    blocks.push({ type: 'para', text: chars.map(x => x.c).join(''), chars, hasImage: false, psr: p.node });
+    blocks.push({ type: 'para', text: chars.map(x => x.c).join(''), chars, hasImage: false, linkOculto, psr: p.node });
   }
   return blocks;
 }
 
-// Texto + ênfase por caractere de um parágrafo ICML, lendo direto os CSR filhos
-// do PSR. Inclui o texto visível de hyperlinks (<HyperlinkTextSource>) e ignora
+// Texto + ênfase por caractere de um parágrafo ICML, lendo direto os CSR do PSR.
+// Inclui o texto visível de hyperlinks (<HyperlinkTextSource>) — que o InDesign
+// grava ora ENVOLVENDO CSRs (filho do PSR), ora DENTRO de um CSR — e ignora
 // notas/rodapés/quebras/tabelas/imagens. Não usa readInlines para não depender do
 // modelo do editor (que omite o texto de hyperlink).
+//
+// Devolve também `linkOculto`: houve texto de hyperlink que o editor NÃO renderiza,
+// então os offsets deste texto não batem com os do parágrafo no editor (as marcas
+// de diferença por trecho ficam desligadas nesse parágrafo).
 function extrairCharsICML(psr, paraStyle, fs) {
   const chars = [];
-  for (const csr of Array.from(psr.childNodes)) {
-    if (csr.nodeType !== 1 || csr.tagName !== 'CharacterStyleRange') continue;
+  let linkOculto = false;
+
+  const lerCSR = csr => {
     const local = csr.getAttribute('FontStyle');
     const fontStyle = local || fs.char.get(csr.getAttribute('AppliedCharacterStyle') || '') || fs.para.get(paraStyle) || '';
     const bold = /bold/i.test(fontStyle);
@@ -60,11 +93,22 @@ function extrairCharsICML(psr, paraStyle, fs) {
     for (const node of Array.from(csr.childNodes)) {
       if (node.nodeType !== 1) continue;
       if (node.tagName === 'Content') add(node.textContent);
-      else if (node.tagName === 'HyperlinkTextSource')
-        for (const cc of Array.from(node.getElementsByTagName('Content'))) add(cc.textContent);
+      else if (node.tagName === 'HyperlinkTextSource') {
+        for (const cc of Array.from(node.getElementsByTagName('Content'))) { add(cc.textContent); if (cc.textContent) linkOculto = true; }
+      }
+    }
+  };
+
+  for (const node of Array.from(psr.childNodes)) {
+    if (node.nodeType !== 1) continue;
+    if (node.tagName === 'CharacterStyleRange') lerCSR(node);
+    // Hyperlink no nível do parágrafo: envolve os CSR com o texto do link.
+    else if (node.tagName === 'HyperlinkTextSource') {
+      for (const csr of Array.from(node.childNodes))
+        if (csr.nodeType === 1 && csr.tagName === 'CharacterStyleRange') { const antes = chars.length; lerCSR(csr); if (chars.length > antes) linkOculto = true; }
     }
   }
-  return chars;
+  return { chars, linkOculto };
 }
 
 function icmlTableBlock(doc, tableNode) {
@@ -146,7 +190,10 @@ function lcsWordOps(a, b, key) {
   return ops;
 }
 function diffMarks(wordText, icmlText) {
-  const W = tokenize(wordText), I = tokenize(icmlText);
+  // O enumerador inicial (numeração automática do Word × número gravado no ICML)
+  // sai dos dois lados; os offsets do ICML voltam ao original no fim.
+  const dI = tamEnumerador(icmlText);
+  const W = tokenize(semEnumerador(wordText)), I = tokenize(icmlText.slice(dI));
   const ops = lcsWordOps(W, I, x => chave(x.w));
   const green = [], cuts = [];
   let icmlPos = 0;                    // offset no ICML onde inserir os cortes
@@ -160,13 +207,13 @@ function diffMarks(wordText, icmlText) {
     else { flushGreen(); if (cutAt === null) cutAt = icmlPos; cutBuf.push(W[op.i].w); }
   }
   flushCut(); flushGreen();
-  return { green, cuts };
+  return { green: green.map(([a, b]) => [a + dI, b + dI]), cuts: cuts.map(c => ({ ...c, at: c.at + dI })) };
 }
 
 // Similaridade grosseira entre dois textos: (prefixo + sufixo comuns) / menor.
 const LIMIAR_SIMILAR = 0.4;
 function scoreSimilar(a, b) {
-  const x = chave(a), y = chave(b);
+  const x = chaveParagrafo(a), y = chaveParagrafo(b);
   if (!x.length || !y.length) return 0;
   let p = 0; while (p < x.length && p < y.length && x[p] === y[p]) p++;
   let s = 0; while (s < x.length - p && s < y.length - p && x[x.length - 1 - s] === y[y.length - 1 - s]) s++;
@@ -190,7 +237,7 @@ export function comparar(docxBlocks, icmlBlocks) {
   const wp = docxBlocks.filter(ehParaTexto);
   const ip = icmlBlocks.filter(ehParaTexto);
 
-  const ops = alinhar(wp, ip, b => chave(b.text));
+  const ops = alinhar(wp, ip, b => chaveParagrafo(b.text));
   let ultimoIcml = null;   // último parágrafo do ICML casado (âncora p/ inserir ausentes)
   // Junta del/ins adjacentes como parágrafos MODIFICADOS (texto alterado).
   for (let k = 0; k < ops.length; k++) {
@@ -224,9 +271,11 @@ export function comparar(docxBlocks, icmlBlocks) {
       const w = dels[di];
       if (delPar.has(di)) {
         const i = inss[delPar.get(di)];
-        if (chave(w.text) === chave(i.text)) verificarEnfase(achados, w, i);   // igual: artefato do LCS
+        if (chaveParagrafo(w.text) === chaveParagrafo(i.text)) verificarEnfase(achados, w, i);   // igual: artefato do LCS
         else {
-          const marks = diffMarks(w.text, i.text);   // verde (adicionado) + cortes (tachado)
+          // Sem marcas por trecho quando o parágrafo tem texto de hyperlink: o editor
+          // não o renderiza, então os offsets daqui não correspondem aos de lá.
+          const marks = i.linkOculto ? { green: [], cuts: [] } : diffMarks(w.text, i.text);
           achados.push({ tipo: 'texto', psr: i.psr, green: marks.green, cuts: marks.cuts, msg: 'Texto do parágrafo diferente', contexto: preview(i.text), word: preview(w.text), indesign: preview(i.text) });
         }
       } else {

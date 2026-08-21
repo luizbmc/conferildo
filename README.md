@@ -127,6 +127,13 @@ Abra o navegador, arraste um `.icml` para a janela (ou "Abrir ICML"). Para revis
   em `LinkResourceURI`. Como o navegador não carrega `file:` de uma página http, o
   `server.js` expõe um endpoint `/local-image` que lê a imagem do disco. Se o arquivo não
   existir, mostra um marcador com o nome. A imagem é só visualização (não editável).
+- **Comparar DOCX** (⇄): confere o texto do ICML contra o `.docx` de origem e lista as
+  divergências (parágrafo alterado, ausente, só no InDesign, tabela, destaque perdido).
+  A comparação é de **texto**: ignora espaçamento, formatação/estilo, o **tipo das aspas**
+  e do apóstrofo (retas × tipográficas), e o **enumerador** no início de títulos e itens de
+  lista — no Word ele costuma vir da numeração automática (invisível no texto) e no
+  InDesign está gravado como texto ("1.4.<TAB>Título"). O texto dentro de hyperlinks é
+  comparado normalmente.
 - **Exportar ICML**: baixa o arquivo revisado para recolocar no InDesign.
 
 ## Testes

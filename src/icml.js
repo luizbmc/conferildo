@@ -1354,10 +1354,13 @@ function splitPsrAfterBr(psr, br, doc) {
     for (const item of resto) csrNovo.appendChild(item);
     novo.appendChild(csrNovo);
   }
-  // CSRs seguintes → movem para o novo PSR.
+  // Tudo que vem depois → move para o novo PSR. Além dos CSR, isso inclui os
+  // <HyperlinkTextSource>/<HyperlinkTextDestination>, que o InDesign grava como
+  // filhos do PSR envolvendo os CSR do texto do link: se ficassem para trás, o
+  // texto do link migraria para o parágrafo anterior.
   const seguintes = [];
   for (let c = brCsr.nextSibling; c; c = c.nextSibling)
-    if (c.nodeType === 1 && c.tagName === 'CharacterStyleRange') seguintes.push(c);
+    if (c.nodeType === 1 && c.tagName !== 'Properties') seguintes.push(c);
   for (const c of seguintes) novo.appendChild(c);
 
   psr.parentNode.insertBefore(novo, psr.nextSibling);
