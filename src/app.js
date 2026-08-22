@@ -118,6 +118,21 @@ async function abrirArquivo(file) {
   try {
     const texto = await file.text();
     const { doc, story } = icml.parseIcml(texto, DOMParser);
+    if (icml.temControleAlteracoesBloqueante(story)) {
+      alert(
+        'Este ICML foi exportado com o Controle de Alterações do InDesign ligado.\n\n' +
+        'Por isso o texto está "preso" dentro das marcações de revisão e o Conferildo ' +
+        'não consegue exibi-lo — o documento abriria em branco.\n\n' +
+        'Como resolver, no InDesign/InCopy:\n' +
+        '1. Aceite todas as alterações: menu Edição ▸ Controle de Alterações ▸ ' +
+        'Aceitar Todas as Alterações na História (ou pelo painel Alterações).\n' +
+        '2. Desligue o Controle de Alterações.\n' +
+        '3. Exporte o ICML novamente e abra aqui.\n\n' +
+        'Alternativa rápida: selecione todo o conteúdo, cole em um documento em branco ' +
+        'do InDesign e exporte esse novo arquivo.'
+      );
+      return;
+    }
     icml.splitParagraphsAtBreaks(story);   // <Br/> = fim de parágrafo → 1 PSR por parágrafo
     state.doc = doc;
     state.story = story;

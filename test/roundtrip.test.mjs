@@ -21,6 +21,7 @@ import {
   hasLiveTextFrom, findMatchesInParagraph, replaceRange,
   headingLevels,
   moveParagraphsAfter, copyParagraphsAfter, paragraphList,
+  temControleAlteracoesBloqueante,
 } from '../src/icml.js';
 
 // Encontra a primeira <Table> na story.
@@ -778,4 +779,30 @@ test('copyParagraphsAfter duplica o bloco após o alvo e mantém o invariante de
   assert.equal(txtDoNode(clones[0]), t1);
   assert.equal(txtDoNode(clones[1]), t2);
   assert.equal(txtDoNode(bloco[0]), t1, 'original permanece');
+});
+
+// ── Controle de Alterações do InDesign ────────────────────────
+
+// Story com o corpo preso dentro de <Change ChangeType="InsertedText">, como o
+// InDesign exporta quando o Controle de Alterações está ligado.
+const storyDe = xml => parseIcml(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Document><Story Self="s1">${xml}</Story></Document>`, DOMParser).story;
+
+const psr = txt => `<ParagraphStyleRange AppliedParagraphStyle="ParagraphStyle/texto">
+  <CharacterStyleRange AppliedCharacterStyle="CharacterStyle/$ID/[No character style]">
+    <Content>${txt}</Content><Br />
+  </CharacterStyleRange></ParagraphStyleRange>`;
+
+const LONGO = 'texto de corpo com tamanho suficiente para passar do limite minimo. '.repeat(5);
+
+test('detecta ICML com Controle de Alterações ligado (texto preso em <Change>)', () => {
+  const story = storyDe(`<Change ChangeType="InsertedText">${psr(LONGO)}</Change>`);
+  assert.equal(temControleAlteracoesBloqueante(story), true);
+});
+
+test('ICML normal e revisão pontual não disparam o alerta', () => {
+  assert.equal(temControleAlteracoesBloqueante(storyDe(psr(LONGO))), false, 'sem <Change>');
+  // Uma marca de revisão pequena no meio de um texto legível: ainda dá para ler.
+  const pontual = storyDe(psr(LONGO) + `<Change ChangeType="InsertedText">${psr('emenda curta')}</Change>`);
+  assert.equal(temControleAlteracoesBloqueante(pontual), false);
 });

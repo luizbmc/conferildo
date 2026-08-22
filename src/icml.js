@@ -53,6 +53,35 @@ export function readParagraphs(doc, story) {
   }));
 }
 
+/**
+ * Detecta um ICML exportado do InDesign/InCopy com o Controle de Alterações
+ * (Track Changes) LIGADO. Nesse caso o corpo do texto fica embrulhado em
+ * elementos <Change ChangeType="InsertedText|DeletedText|…">, que aninham os
+ * ParagraphStyleRange. Como readParagraphs só lê os PSR filhos DIRETOS do
+ * <Story> (e não desce para dentro dos <Change>), o conteúdo preso não é
+ * renderizado e o documento abre praticamente em branco.
+ *
+ * Retorna true apenas quando a MAIOR parte do texto está presa — poucas marcas
+ * de revisão pontuais não impedem a leitura e não devem disparar o alerta.
+ * As marcações do próprio Conferildo usam <AppliedConditions>, não <Change>,
+ * então não causam falso positivo.
+ */
+export function temControleAlteracoesBloqueante(story) {
+  const contarContent = (el) =>
+    Array.from(el.getElementsByTagName('Content'))
+      .reduce((soma, c) => soma + c.textContent.length, 0);
+
+  const changes = Array.from(story.getElementsByTagName('Change'))
+    .filter(c => c.getAttribute('ChangeType'));
+  if (!changes.length) return false;
+
+  const preso   = changes.reduce((soma, c) => soma + contarContent(c), 0);
+  const total   = contarContent(story);
+  const visivel = total - preso;
+
+  return preso >= 200 && preso > visivel;
+}
+
 // Sequência inline de um CharacterStyleRange: texto, notas e quebras, em ordem.
 function readInlines(csr) {
   const items = [];
