@@ -1,5 +1,5 @@
 {
-  "version": "0.2.0",
+  "version": "0.3.0",
   "url": "https://github.com/luizbmc/conferildo/releases",
-  "notas": "Renderização muito mais fiel ao InDesign: bordas e sombreamento (cor, tipo de traço, cantos, largura=texto), cores CMYK calibradas, marcadores de lista (caractere, fonte, cor e tabulação) e espaçamento entre parágrafos (SpaceBefore/After somados, SameParaStyleSpacing). Passa a exibir imagens .ai/.pdf."
+  "notas": "Comparacao com o Word ignora troca de aspas, numeracao automatica de titulos e espaco na quebra de linha. Corrige perda do texto dentro de hiperlinks, que tambem se deslocava para o paragrafo anterior no ICML exportado. Avisa quando o ICML vem com o Controle de Alteracoes do InDesign ligado, em vez de abrir em branco."
 }
