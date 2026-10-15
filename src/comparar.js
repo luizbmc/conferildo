@@ -4,8 +4,10 @@
 // projeto, diferenças de espaço em branco, de formatação/estilo, parágrafos de
 // imagem, e (em tabelas) tudo além de nº de células + texto de cada célula.
 //
-// Exceção — ênfase (negrito/itálico): só é acusada quando é um DESTAQUE DENTRO do
-// parágrafo (um trecho) presente no Word e ausente no InDesign. Ênfase de
+// Exceção — ênfase (negrito/itálico): é acusada quando é um DESTAQUE DENTRO do
+// parágrafo (um trecho) presente de um lado e ausente do outro — perdido (só no
+// Word) ou adicionado (só no InDesign). No Word vale a aparência: estilo de
+// caractere de negrito com o negrito desligado à mão conta como regular. Ênfase de
 // parágrafo INTEIRO (título todo em negrito, assinatura toda em itálico) é opção
 // de estilo e é ignorada.
 //
@@ -89,10 +91,13 @@ function extrairCharsICML(psr, paraStyle, fs) {
 
   const lerCSR = csr => {
     const local = csr.getAttribute('FontStyle');
-    const fontStyle = local || fs.char.get(csr.getAttribute('AppliedCharacterStyle') || '') || fs.para.get(paraStyle) || '';
+    const doEstiloChar = fs.char.get(csr.getAttribute('AppliedCharacterStyle') || '');
+    const fontStyle = local || doEstiloChar || fs.para.get(paraStyle) || '';
     const bold = /bold/i.test(fontStyle);
     const italic = /italic|oblique/i.test(fontStyle);
-    const add = t => { for (const c of t) chars.push({ c, bold, italic }); };
+    // Ênfase vinda só do estilo de PARÁGRAFO = opção de estilo, não destaque de trecho.
+    const doPar = !local && !doEstiloChar;
+    const add = t => { for (const c of t) chars.push({ c, bold, italic, boldPar: bold && doPar, italicPar: italic && doPar }); };
     for (const node of Array.from(csr.childNodes)) {
       if (node.nodeType !== 1) continue;
       if (node.tagName === 'Content') add(node.textContent);
@@ -146,21 +151,37 @@ function alinhar(a, b, key) {
   return ops;
 }
 
-// ── Ênfase: trechos destacados no Word e regulares no InDesign ─
-function seqNaoEspaco(chars) { return chars.filter(c => c.c.trim()); }
+// ── Ênfase: trechos destacados de um lado e regulares do outro ─
+// Só letras e algarismos contam: espaço e pontuação colados ao destaque (o ponto
+// depois da palavra em itálico) seguem convenção tipográfica, não são destaque.
+// Cada item guarda `i`, a posição no texto original (para o trecho sair com espaços).
+const RE_SIGNIFICATIVO = /[\p{L}\p{N}]/u;
+function seqNaoEspaco(chars) {
+  const out = [];
+  chars.forEach((c, i) => { if (RE_SIGNIFICATIVO.test(c.c)) out.push({ ...c, i }); });
+  return out;
+}
 
-function trechosPerdidos(seqW, seqI, prop) {
-  if (seqW.length !== seqI.length || !seqW.length) return [];
-  const enf = seqW.filter(c => c[prop]).length;
+// Trechos com `prop` em `seqA` e sem ela em `seqB` (mesma sequência de caracteres),
+// recortados do texto original de A (`charsA`). São opção de estilo, e não contam:
+// a ênfase do parágrafo (quase) inteiro e a que vem só do estilo de PARÁGRAFO
+// (`boldPar`/`italicPar`) — ex.: "Ver também: termo; termo" com a lista em itálico
+// pelo estilo de parágrafo. Conta o destaque de trecho: estilo de caractere ou
+// formatação local.
+function trechosSoEm(seqA, seqB, prop, charsA) {
+  if (seqA.length !== seqB.length || !seqA.length) return [];
+  const enf = seqA.filter(c => c[prop]).length;
   if (enf === 0) return [];
-  if (enf / seqW.length >= LIMIAR_ENFASE_PARAGRAFO) return [];   // parágrafo inteiro → estilo
+  if (enf / seqA.length >= LIMIAR_ENFASE_PARAGRAFO) return [];   // parágrafo inteiro → estilo
+  const destaque = c => c[prop] && !c[prop + 'Par'];
   const out = [];
   let i = 0;
-  while (i < seqW.length) {
-    if (seqW[i][prop] && !seqI[i][prop]) {
-      let j = i, t = '';
-      while (j < seqW.length && seqW[j][prop] && !seqI[j][prop]) { t += seqW[j].c; j++; }
-      out.push(t); i = j;
+  while (i < seqA.length) {
+    if (destaque(seqA[i]) && !seqB[i][prop]) {
+      let j = i;
+      while (j < seqA.length && destaque(seqA[j]) && !seqB[j][prop]) j++;
+      out.push(charsA.slice(seqA[i].i, seqA[j - 1].i + 1).map(c => c.c).join(''));
+      i = j;
     } else i++;
   }
   return out;
@@ -223,12 +244,20 @@ function scoreSimilar(a, b) {
   return (p + s) / Math.min(x.length, y.length);
 }
 
-// Empurra os destaques (negrito/itálico) do Word ausentes no InDesign.
+// Empurra os destaques (negrito/itálico) do Word ausentes no InDesign (perdidos) e os
+// do InDesign que não existem no Word (adicionados). Vale a APARÊNCIA no Word: um
+// trecho com estilo de caractere de negrito mas negrito desligado na formatação
+// direta conta como regular (resolvido em docx.js).
 // `psr` = nó do parágrafo no ICML (p/ marcar/navegar no editor).
 function verificarEnfase(achados, w, i) {
-  for (const prop of ['bold', 'italic'])
-    for (const trecho of trechosPerdidos(seqNaoEspaco(w.chars), seqNaoEspaco(i.chars), prop))
-      achados.push({ tipo: 'enfase', prop, psr: i.psr, msg: `Destaque em ${prop === 'bold' ? 'negrito' : 'itálico'} perdido: “${preview(trecho, 60)}”`, contexto: preview(w.text) });
+  const sw = seqNaoEspaco(w.chars), si = seqNaoEspaco(i.chars);
+  for (const prop of ['bold', 'italic']) {
+    const nome = prop === 'bold' ? 'negrito' : 'itálico';
+    for (const trecho of trechosSoEm(sw, si, prop, w.chars))
+      achados.push({ tipo: 'enfase', prop, sentido: 'perdido', psr: i.psr, msg: `Destaque em ${nome} perdido: “${preview(trecho, 60)}”`, contexto: preview(w.text) });
+    for (const trecho of trechosSoEm(si, sw, prop, i.chars))
+      achados.push({ tipo: 'enfase', prop, sentido: 'adicionado', psr: i.psr, msg: `Destaque em ${nome} adicionado: “${preview(trecho, 60)}”`, contexto: preview(w.text) });
+  }
 }
 
 // ── Comparação principal ──────────────────────────────────────

@@ -128,7 +128,16 @@ Abra o navegador, arraste um `.icml` para a janela (ou "Abrir ICML"). Para revis
   `server.js` expõe um endpoint `/local-image` que lê a imagem do disco. Se o arquivo não
   existir, mostra um marcador com o nome. A imagem é só visualização (não editável).
 - **Comparar DOCX** (⇄): confere o texto do ICML contra o `.docx` de origem e lista as
-  divergências (parágrafo alterado, ausente, só no InDesign, tabela, destaque perdido).
+  divergências (parágrafo alterado, ausente, só no InDesign, tabela, destaque em negrito ou
+  itálico perdido ou adicionado). Na ênfase vale a **aparência** no Word: um trecho com o
+  estilo de caractere de negrito mas com o negrito desligado pelos botões de formatação
+  conta como regular. Conta como destaque só a ênfase de **trecho** (estilo de caractere
+  ou formatação local, com letras ou algarismos); a que vem do estilo de parágrafo, a do
+  parágrafo inteiro e a da pontuação colada à palavra são opção de estilo.
+- **Abrir IDML**: em vez do ICML, dá para abrir o `.idml` do livro. O Conferildo usa a
+  story principal (a de mais texto — o miolo) com os estilos do documento, para revisar
+  e comparar com o DOCX. A exportação fica desligada: para atualizar o vínculo no
+  InDesign é preciso o ICML.
   A comparação é de **texto**: ignora espaçamento, formatação/estilo, o **tipo das aspas**
   e do apóstrofo (retas × tipográficas), e o **enumerador** no início de títulos e itens de
   lista — no Word ele costuma vir da numeração automática (invisível no texto) e no

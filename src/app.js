@@ -1,6 +1,7 @@
 import * as icml from './icml.js';
 import * as docx from './docx.js';
 import * as comparar from './comparar.js';
+import * as idml from './idml.js';
 
 const SEM_ESTILO_CHAR = 'CharacterStyle/$ID/[No character style]';
 
@@ -116,7 +117,14 @@ el.editor.addEventListener('click', ativarPorEvento);
 
 async function abrirArquivo(file) {
   try {
-    const texto = await file.text();
+    // IDML: monta em memória um ICML com a story principal (o miolo) — serve para
+    // revisar e comparar com o DOCX; a exportação continua sendo só a partir do ICML.
+    const ehIdml = /\.idml$/i.test(file.name);
+    let texto, infoIdml = null;
+    if (ehIdml) {
+      infoIdml = await idml.idmlParaIcml(await file.arrayBuffer());
+      texto = infoIdml.xml;
+    } else texto = await file.text();
     const { doc, story } = icml.parseIcml(texto, DOMParser);
     if (icml.temControleAlteracoesBloqueante(story)) {
       alert(
@@ -136,9 +144,10 @@ async function abrirArquivo(file) {
     icml.splitParagraphsAtBreaks(story);   // <Br/> = fim de parágrafo → 1 PSR por parágrafo
     state.doc = doc;
     state.story = story;
-    state.fileName = file.name.replace(/\.icml$/i, '') + '-revisado.icml';
+    state.fileName = file.name.replace(/\.i[cd]ml$/i, '') + '-revisado.icml';
     el.nomeArq.textContent = file.name;
-    el.exportar.disabled = false;
+    el.exportar.disabled = ehIdml;
+    el.exportar.title = ehIdml ? 'Aberto a partir de IDML: só para revisar e comparar. Para exportar, abra o ICML.' : '';
     el.vazio.hidden = true;
     el.editor.classList.add('ativo');
     el.painelEstilos.hidden = false;
@@ -157,7 +166,9 @@ async function abrirArquivo(file) {
     el.editor.classList.remove('marcacoes-ocultas');
     montarPaineis();
     render();
-    toast('Arquivo carregado.');
+    toast(ehIdml
+      ? `IDML carregado: story principal (${infoIdml.caracteres.toLocaleString('pt-BR')} caracteres; ${infoIdml.outras} stories menores ignoradas). Exportar fica desligado.`
+      : 'Arquivo carregado.');
   } catch (err) {
     console.error(err);
     toast('Erro ao abrir: ' + err.message);

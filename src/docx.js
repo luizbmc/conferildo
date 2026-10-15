@@ -2,7 +2,8 @@
 // Extrai de um .docx (ZIP OOXML) os blocos de conteúdo na ordem do documento:
 // parágrafos (com texto e ênfase negrito/itálico por caractere) e tabelas (com o
 // texto de cada célula). A ênfase é resolvida tanto da formatação direta (<w:b/>,
-// <w:i/>) quanto dos estilos de caractere (<w:rStyle>) definidos em styles.xml.
+// <w:i/>) quanto dos estilos de parágrafo (<w:pStyle>) e de caractere (<w:rStyle>)
+// definidos em styles.xml — vale a aparência no Word.
 //
 // O unzip usa APIs nativas (DecompressionStream) — sem dependências.
 
@@ -14,15 +15,17 @@ async function inflateRaw(bytes) {
   return new TextDecoder('utf-8').decode(await new Response(stream).arrayBuffer());
 }
 
-// Extrai as entradas `wanted` (nomes) de um ZIP (ArrayBuffer) → { nome: string }.
+// Extrai as entradas `wanted` de um ZIP (ArrayBuffer) → { nome: string }.
+// `wanted` = lista de nomes ou função (nome) → boolean.
 export async function unzip(arrayBuffer, wanted) {
+  const quer = typeof wanted === 'function' ? wanted : n => wanted.includes(n);
   const dv = new DataView(arrayBuffer);
   const bytes = new Uint8Array(arrayBuffer);
   const dec = new TextDecoder('utf-8');
   // End Of Central Directory
   let i = dv.byteLength - 22;
   while (i >= 0 && dv.getUint32(i, true) !== 0x06054b50) i--;
-  if (i < 0) throw new Error('Arquivo .docx inválido (ZIP não reconhecido).');
+  if (i < 0) throw new Error('Arquivo inválido (ZIP não reconhecido).');
   const count = dv.getUint16(i + 10, true);
   let p = dv.getUint32(i + 16, true);
   const out = {};
@@ -34,7 +37,7 @@ export async function unzip(arrayBuffer, wanted) {
     const commLen  = dv.getUint16(p + 32, true);
     const lho      = dv.getUint32(p + 42, true);
     const name = dec.decode(bytes.subarray(p + 46, p + 46 + nameLen));
-    if (wanted.includes(name)) {
+    if (quer(name)) {
       const lfn = dv.getUint16(lho + 26, true), lex = dv.getUint16(lho + 28, true);
       const ds = lho + 30 + lfn + lex;
       const comp = bytes.subarray(ds, ds + csize);
@@ -70,13 +73,15 @@ function toggle(el) {
   return !(v === '0' || v === 'false' || v === 'off');
 }
 
-// Mapa styleId → { bold, italic, basedOn } dos estilos de CARACTERE do styles.xml.
-function lerEstilosCaractere(stylesXml, DOMParser) {
+// Mapa styleId → { bold, italic, basedOn } dos estilos de CARACTERE e de PARÁGRAFO
+// do styles.xml (os ids não se repetem entre os tipos).
+function lerEstilos(stylesXml, DOMParser) {
   const map = new Map();
   if (!stylesXml) return map;
   const doc = new DOMParser().parseFromString(stylesXml, 'application/xml');
   for (const s of desc(doc.documentElement, W + 'style')) {
-    if (s.getAttribute(W + 'type') !== 'character') continue;
+    const tipo = s.getAttribute(W + 'type');
+    if (tipo !== 'character' && tipo !== 'paragraph') continue;
     const id = s.getAttribute(W + 'styleId');
     if (!id) continue;
     const rPr = firstKid(s, W + 'rPr');
@@ -90,7 +95,7 @@ function lerEstilosCaractere(stylesXml, DOMParser) {
   return map;
 }
 
-// Resolve bold/italic de um estilo de caractere seguindo a cadeia basedOn.
+// Resolve bold/italic de um estilo seguindo a cadeia basedOn.
 function estiloEmphasis(id, estilos, prop, visto = new Set()) {
   if (!id || visto.has(id) || !estilos.has(id)) return undefined;
   visto.add(id);
@@ -99,24 +104,29 @@ function estiloEmphasis(id, estilos, prop, visto = new Set()) {
   return estiloEmphasis(s.basedOn, estilos, prop, visto);
 }
 
-// Ênfase efetiva de um run: estilo de caractere (rStyle) sobreposto pela formatação
-// direta (rPr). NÃO resolve o estilo de PARÁGRAFO — ênfase de parágrafo inteiro
-// (título/assinatura) não é intra-parágrafo e não deve ser tratada como destaque.
-function runEmphasis(rPr, estilos) {
-  let bold = false, italic = false;
+// Ênfase efetiva (APARÊNCIA) de um run, como o Word a calcula: estilo de parágrafo,
+// depois estilo de caractere (rStyle) — negrito/itálico são propriedades "toggle":
+// o do estilo de caractere INVERTE o do parágrafo (negrito sobre negrito = regular) —
+// e por fim a formatação direta (rPr), que vale de forma absoluta.
+// `boldPar`/`italicPar`: a ênfase vem SÓ do estilo de parágrafo (opção de estilo, não
+// destaque de trecho — descartada na comparação, como a do parágrafo inteiro).
+function runEmphasis(rPr, estilos, pStyle) {
+  let bold = !!estiloEmphasis(pStyle, estilos, 'bold');
+  let italic = !!estiloEmphasis(pStyle, estilos, 'italic');
+  let boldPar = bold, italicPar = italic;
   if (rPr) {
     const rStyle = firstKid(rPr, W + 'rStyle');
     if (rStyle) {
       const id = rStyle.getAttribute(W + 'val');
-      bold   = !!estiloEmphasis(id, estilos, 'bold');
-      italic = !!estiloEmphasis(id, estilos, 'italic');
+      if (estiloEmphasis(id, estilos, 'bold')) { bold = !bold; boldPar = false; }
+      if (estiloEmphasis(id, estilos, 'italic')) { italic = !italic; italicPar = false; }
     }
     const b = toggle(firstKid(rPr, W + 'b'));
     const it = toggle(firstKid(rPr, W + 'i'));
-    if (b !== undefined) bold = b;
-    if (it !== undefined) italic = it;
+    if (b !== undefined) { bold = b; boldPar = false; }
+    if (it !== undefined) { italic = it; italicPar = false; }
   }
-  return { bold, italic };
+  return { bold, italic, boldPar: bold && boldPar, italicPar: italic && italicPar };
 }
 
 // Texto de um <w:r>: junta os <w:t> (preserva espaços) e trata <w:tab/>/<w:br/>.
@@ -137,11 +147,14 @@ function textoDoRun(r) {
 function parseParagrafo(pEl, estilos) {
   const chars = [];
   let hasImage = false;
+  const pPr = firstKid(pEl, W + 'pPr');
+  const ps = pPr && firstKid(pPr, W + 'pStyle');
+  const pStyle = ps ? ps.getAttribute(W + 'val') : null;
   for (const r of desc(pEl, W + 'r')) {
     if (desc(r, W + 'drawing').length || desc(r, W + 'pict').length || desc(r, W + 'object').length) hasImage = true;
-    const emp = runEmphasis(firstKid(r, W + 'rPr'), estilos);
+    const emp = runEmphasis(firstKid(r, W + 'rPr'), estilos, pStyle);
     const t = textoDoRun(r);
-    for (const c of t) chars.push({ c, bold: emp.bold, italic: emp.italic });
+    for (const c of t) chars.push({ c, ...emp });
   }
   return { type: 'para', text: chars.map(x => x.c).join(''), chars, hasImage };
 }
@@ -164,7 +177,7 @@ function parseTabela(tblEl, estilos) {
 
 // Parseia document.xml + styles.xml → { blocks: [...] } na ordem do corpo.
 export function parseDocx(docXml, stylesXml, DOMParser) {
-  const estilos = lerEstilosCaractere(stylesXml, DOMParser);
+  const estilos = lerEstilos(stylesXml, DOMParser);
   const doc = new DOMParser().parseFromString(docXml, 'application/xml');
   const body = firstKid(doc.documentElement, W + 'body') || doc.documentElement;
   const blocks = [];

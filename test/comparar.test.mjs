@@ -58,6 +58,62 @@ test('destaque parcial presente também no InDesign não acusa', () => {
   assert.deepEqual(comparar(w, i), []);
 });
 
+test('destaque PARCIAL em negrito adicionado no InDesign acusa', () => {
+  const w = [para('A assinatura simples, utilizada em transações')];                       // regular
+  const i = [para('A assinatura simples, utilizada em transações', { bold: [[2, 20]] })];  // "assinatura simples"
+  const r = comparar(w, i);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].tipo, 'enfase');
+  assert.equal(r[0].prop, 'bold');
+  assert.equal(r[0].sentido, 'adicionado');
+  assert.match(r[0].msg, /negrito adicionado: “assinaturasimples”|negrito adicionado: “assinatura/);
+});
+
+test('parágrafo INTEIRO em negrito só no InDesign (opção de estilo) não acusa', () => {
+  const w = [para('Assinatura digital')];
+  const i = [para('Assinatura digital', { bold: [[0, 18]] })];
+  assert.deepEqual(comparar(w, i), []);
+});
+
+test('Word: estilo de caractere de negrito com negrito desligado à mão conta como regular', async () => {
+  const { parseDocx } = await import('../src/docx.js');
+  const W = 'xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"';
+  const styles = `<w:styles ${W}><w:style w:type="character" w:styleId="ZCARACTERENegrito">
+    <w:name w:val="_ZCARACTERE&gt;Negrito"/><w:rPr><w:b/></w:rPr></w:style></w:styles>`;
+  const docXml = `<w:document ${W}><w:body><w:p>
+    <w:r><w:t xml:space="preserve">A </w:t></w:r>
+    <w:r><w:rPr><w:rStyle w:val="ZCARACTERENegrito"/><w:b w:val="0"/></w:rPr><w:t>assinatura</w:t></w:r>
+    <w:r><w:t xml:space="preserve"> e a </w:t></w:r>
+    <w:r><w:rPr><w:rStyle w:val="ZCARACTERENegrito"/></w:rPr><w:t>qualificada</w:t></w:r>
+    <w:r><w:t xml:space="preserve"> são tipos previstos em lei.</w:t></w:r>
+  </w:p></w:body></w:document>`;
+  const [p] = parseDocx(docXml, styles, DOMParser).blocks;
+  const negrito = p.chars.filter(c => c.bold).map(c => c.c).join('');
+  assert.equal(negrito, 'qualificada');
+  // InDesign com "assinatura" em negrito → acusa como adicionado
+  const i = [para('A assinatura e a qualificada são tipos previstos em lei.', { bold: [[2, 12], [17, 28]] })];
+  const r = comparar([p], i);
+  assert.equal(r.length, 1);
+  assert.equal(r[0].sentido, 'adicionado');
+  assert.match(r[0].msg, /assinatura/);
+});
+
+test('pontuação colada ao destaque não conta (itálico só no ponto final)', () => {
+  const w = [para('Ver os termos bigtechs e trend.', { italic: [[19, 26], [29, 34]] })];   // "trend" sem o ponto
+  const i = [para('Ver os termos bigtechs e trend.', { italic: [[19, 26], [29, 35]] })];   // "trend."
+  assert.deepEqual(comparar(w, i), []);
+});
+
+test('ênfase vinda só do estilo de PARÁGRAFO no InDesign não acusa (Ver também: lista em itálico)', () => {
+  const w = [para('Ver também: algoritmo; redes sociais.')];
+  const i = para('Ver também: algoritmo; redes sociais.', { italic: [[11, 37]] });
+  i.chars.forEach(c => { if (c.italic) c.italicPar = true; });   // itálico do estilo de parágrafo
+  assert.deepEqual(comparar(w, [i]), []);
+  // o mesmo itálico vindo de estilo de caractere/local é destaque → acusa
+  const i2 = para('Ver também: algoritmo; redes sociais.', { italic: [[11, 37]] });
+  assert.equal(comparar(w, [i2]).length, 1);
+});
+
 test('parágrafo de imagem é ignorado', () => {
   const w = [para('Texto de verdade.')];
   const i = [{ type: 'para', text: '', chars: [], hasImage: true }, para('Texto de verdade.')];
