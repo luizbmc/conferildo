@@ -1,5 +1,5 @@
 {
-  "version": "0.3.0",
+  "version": "0.4.0",
   "url": "https://github.com/luizbmc/conferildo/releases",
-  "notas": "Comparacao com o Word ignora troca de aspas, numeracao automatica de titulos e espaco na quebra de linha. Corrige perda do texto dentro de hiperlinks, que tambem se deslocava para o paragrafo anterior no ICML exportado. Avisa quando o ICML vem com o Controle de Alteracoes do InDesign ligado, em vez de abrir em branco."
+  "notas": "Comparacao com o Word: acusa tambem negrito e italico adicionados no InDesign, nao so os perdidos. No Word vale a aparencia (estilo de negrito com o negrito desligado a mao conta como regular); enfase do estilo de paragrafo e da pontuacao e tratada como opcao de estilo. Abre arquivos .idml (texto principal do livro) para revisar e comparar; a exportacao continua pelo ICML."
 }
